@@ -28,13 +28,6 @@ declare -a SOFTWARE_STATES=(0 0 0)
 CURRENT_ROW=0
 TOTAL_ITEMS=${#SOFTWARE_NAMES[@]}
 
-# Terminal control
-save_cursor() { printf '\033[s'; }
-restore_cursor() { printf '\033[u'; }
-hide_cursor() { printf '\033[?25l'; }
-show_cursor() { printf '\033[?25h'; }
-move_to_row() { printf '\033[%d;1H' "$1"; }
-
 # Function to print colored output
 print_info() { echo -e "${BLUE}[INFO]${NC} $1"; }
 print_success() { echo -e "${GREEN}[SUCCESS]${NC} $1"; }
@@ -152,34 +145,39 @@ draw_interface() {
     echo -e "${BLUE}══════════════════════════════════════════════════════════════${NC}"
 }
 
-# Read key with proper handling
+# Read a single key with proper escape sequence handling
 read_key() {
     local key
-    # Use timeout to avoid hanging
-    if read -rsn1 -t 0.1 key 2>/dev/null; then
-        if [[ $key == $'\033' ]]; then
-            # Handle escape sequences
-            if read -rsn2 -t 0.1 key 2>/dev/null; then
-                case $key in
-                    '[A') echo "UP" ;;
-                    '[B') echo "DOWN" ;;
-                    *) echo "OTHER" ;;
-                esac
-            else
-                echo "ESC"
-            fi
-        else
-            case $key in
-                ' ') echo "SPACE" ;;
-                $'\n'|$'\r') echo "ENTER" ;;
-                'q'|'Q') echo "QUIT" ;;
-                'k') echo "UP" ;;      # vim-style
-                'j') echo "DOWN" ;;    # vim-style
+    local key2
+    local key3
+    
+    # Read first character
+    read -rsn1 key
+    
+    # Check if it's an escape sequence
+    if [[ $key == $'\033' ]]; then
+        # Read the next character
+        read -rsn1 -t 0.001 key2
+        if [[ $key2 == '[' ]]; then
+            # Read the final character
+            read -rsn1 -t 0.001 key3
+            case $key3 in
+                'A') echo "UP" ;;
+                'B') echo "DOWN" ;;
                 *) echo "OTHER" ;;
             esac
+        else
+            echo "ESC"
         fi
     else
-        echo "TIMEOUT"
+        case $key in
+            ' ') echo "SPACE" ;;
+            $'\n'|$'\r') echo "ENTER" ;;
+            'q'|'Q') echo "QUIT" ;;
+            'k'|'K') echo "UP" ;;
+            'j'|'J') echo "DOWN" ;;
+            *) echo "OTHER" ;;
+        esac
     fi
 }
 
@@ -199,7 +197,6 @@ execute_actions() {
     done
     
     if [ ${#actions[@]} -eq 0 ]; then
-        show_cursor
         clear
         print_warning "No actions selected!"
         echo
@@ -208,7 +205,6 @@ execute_actions() {
     fi
     
     # Execute actions
-    show_cursor
     clear
     echo -e "${BLUE}══════════════════════════════════════════════════════════════${NC}"
     echo -e "${BLUE}                     Executing Actions${NC}"
@@ -233,46 +229,46 @@ execute_actions() {
     read -p "Press Enter to continue..." -r
 }
 
-# Main interactive loop
+# Main interactive loop - ONLY redraw when needed
 main_loop() {
-    # Set up terminal
-    hide_cursor
-    
-    # Handle terminal restoration on exit
-    trap 'show_cursor; clear; exit 0' EXIT INT TERM
+    local need_redraw=true
     
     while true; do
-        draw_interface
+        # Only redraw if needed
+        if [ "$need_redraw" = true ]; then
+            draw_interface
+            need_redraw=false
+        fi
         
+        # Read key (this blocks until key is pressed)
         local key=$(read_key)
         
         case $key in
             "UP")
                 CURRENT_ROW=$(( (CURRENT_ROW - 1 + TOTAL_ITEMS) % TOTAL_ITEMS ))
+                need_redraw=true
                 ;;
             "DOWN") 
                 CURRENT_ROW=$(( (CURRENT_ROW + 1) % TOTAL_ITEMS ))
+                need_redraw=true
                 ;;
             "SPACE")
                 SOFTWARE_STATES[$CURRENT_ROW]=$(( (SOFTWARE_STATES[$CURRENT_ROW] + 1) % 3 ))
+                need_redraw=true
                 ;;
             "ENTER")
                 execute_actions
-                hide_cursor
+                need_redraw=true
                 ;;
             "QUIT")
                 break
                 ;;
-            "TIMEOUT")
-                # Continue loop on timeout (keeps interface responsive)
+            *)
+                # Do nothing for other keys, don't redraw
                 ;;
         esac
-        
-        # Small delay to prevent excessive CPU usage
-        sleep 0.05
     done
     
-    show_cursor
     clear
     print_info "Thanks for using the software installer!"
 }
