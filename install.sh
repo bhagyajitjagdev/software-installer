@@ -1,57 +1,50 @@
 #!/bin/bash
 
-# Interactive Software Installer Script
+# Interactive Software Installer Script with Arrow Keys
 # Repository: https://github.com/bhagyajitjagdev/software-installer
 # Usage: curl -fsSL https://raw.githubusercontent.com/bhagyajitjagdev/software-installer/main/install.sh | bash
 
-set -e  # Exit on any error
+set -e
 
-# Colors for output
+# Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 WHITE='\033[1;37m'
-NC='\033[0m' # No Color
+NC='\033[0m'
 BOLD='\033[1m'
 
-# Software list with their states
-declare -A SOFTWARE_STATES
+# Software configuration
 SOFTWARE_NAMES=("htop" "nmap" "curl")
 SOFTWARE_DESCRIPTIONS=(
     "htop - Interactive Process Viewer"
-    "nmap - Network Discovery Tool"
+    "nmap - Network Discovery Tool" 
     "curl - Command Line HTTP Client"
 )
 
-# Initialize all states to 0 (LIST)
-for sw in "${SOFTWARE_NAMES[@]}"; do
-    SOFTWARE_STATES[$sw]=0
-done
+# State: 0=LIST(white), 1=INSTALL(green), 2=UNINSTALL(red)
+declare -a SOFTWARE_STATES=(0 0 0)
+CURRENT_ROW=0
+TOTAL_ITEMS=${#SOFTWARE_NAMES[@]}
+
+# Terminal control
+save_cursor() { printf '\033[s'; }
+restore_cursor() { printf '\033[u'; }
+hide_cursor() { printf '\033[?25l'; }
+show_cursor() { printf '\033[?25h'; }
+move_to_row() { printf '\033[%d;1H' "$1"; }
 
 # Function to print colored output
-print_info() {
-    echo -e "${BLUE}[INFO]${NC} $1"
-}
+print_info() { echo -e "${BLUE}[INFO]${NC} $1"; }
+print_success() { echo -e "${GREEN}[SUCCESS]${NC} $1"; }
+print_warning() { echo -e "${YELLOW}[WARNING]${NC} $1"; }
+print_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
-print_success() {
-    echo -e "${GREEN}[SUCCESS]${NC} $1"
-}
+# Check if command exists
+command_exists() { command -v "$1" >/dev/null 2>&1; }
 
-print_warning() {
-    echo -e "${YELLOW}[WARNING]${NC} $1"
-}
-
-print_error() {
-    echo -e "${RED}[ERROR]${NC} $1"
-}
-
-# Function to check if command exists
-command_exists() {
-    command -v "$1" >/dev/null 2>&1
-}
-
-# Function to update ~/.bashrc
+# Update ~/.bashrc
 update_bashrc() {
     local content="$1"
     local description="$2"
@@ -61,70 +54,47 @@ update_bashrc() {
         echo "# $description" >> ~/.bashrc
         echo "$content" >> ~/.bashrc
         print_success "Added $description to ~/.bashrc"
-    else
-        print_info "$description already exists in ~/.bashrc"
     fi
 }
 
-# Function to get state display
+# Get state display
 get_state_display() {
-    local state=$1
-    case $state in
-        0) echo -e "${WHITE}[LIST]${NC}" ;;
-        1) echo -e "${GREEN}[INSTALL]${NC}" ;;
-        2) echo -e "${RED}[UNINSTALL]${NC}" ;;
+    case $1 in
+        0) echo -e "${WHITE}[ LIST     ]${NC}" ;;
+        1) echo -e "${GREEN}[ INSTALL  ]${NC}" ;;
+        2) echo -e "${RED}[ UNINSTALL]${NC}" ;;
     esac
-}
-
-# Function to cycle state
-cycle_state() {
-    local software=$1
-    local current_state=${SOFTWARE_STATES[$software]}
-    SOFTWARE_STATES[$software]=$(( (current_state + 1) % 3 ))
 }
 
 # Installation functions
 install_htop() {
     print_info "Installing htop..."
-    
     if command_exists htop; then
         print_warning "htop is already installed"
         return 0
     fi
-    
-    sudo apt-get update -qq
-    sudo apt-get install -y htop
-    
+    sudo apt-get update -qq && sudo apt-get install -y htop
     print_success "htop installed successfully"
 }
 
 install_nmap() {
     print_info "Installing nmap..."
-    
     if command_exists nmap; then
         print_warning "nmap is already installed"
         return 0
     fi
-    
-    sudo apt-get update -qq
-    sudo apt-get install -y nmap
-    
+    sudo apt-get update -qq && sudo apt-get install -y nmap
     print_success "nmap installed successfully"
 }
 
 install_curl() {
     print_info "Installing curl..."
-    
     if command_exists curl; then
         print_warning "curl is already installed"
         return 0
     fi
-    
-    sudo apt-get update -qq
-    sudo apt-get install -y curl
-    
+    sudo apt-get update -qq && sudo apt-get install -y curl
     update_bashrc 'alias curl-json="curl -H \"Content-Type: application/json\""' "Curl JSON alias"
-    
     print_success "curl installed successfully"
 }
 
@@ -132,195 +102,226 @@ install_curl() {
 uninstall_htop() {
     print_info "Uninstalling htop..."
     sudo apt-get remove -y htop
-    print_success "htop uninstalled successfully"
+    print_success "htop uninstalled"
 }
 
 uninstall_nmap() {
     print_info "Uninstalling nmap..."
     sudo apt-get remove -y nmap
-    print_success "nmap uninstalled successfully"
+    print_success "nmap uninstalled"
 }
 
 uninstall_curl() {
-    print_warning "curl is a system dependency and shouldn't be uninstalled"
-    print_info "Skipping curl uninstallation for system stability"
+    print_warning "curl is a system dependency - skipping uninstall"
 }
 
-# Function to show current status
-show_status() {
+# Draw the interface
+draw_interface() {
     clear
-    echo -e "${BLUE}================================================================${NC}"
-    echo -e "${BLUE}              Interactive Software Installer${NC}"
-    echo -e "${BLUE}        Repository: bhagyajitjagdev/software-installer${NC}"
-    echo -e "${BLUE}================================================================${NC}"
+    echo -e "${BLUE}╔══════════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${BLUE}║${NC}              ${BOLD}Interactive Software Installer${NC}              ${BLUE}║${NC}"
+    echo -e "${BLUE}║${NC}        Repository: bhagyajitjagdev/software-installer        ${BLUE}║${NC}"
+    echo -e "${BLUE}╚══════════════════════════════════════════════════════════════╝${NC}"
     echo
-    echo -e "${YELLOW}Current Selection Status:${NC}"
+    echo -e "${YELLOW}Controls: ↑↓ Navigate | SPACE Cycle State | ENTER Execute | Q Quit${NC}"
+    echo -e "${YELLOW}States: ${WHITE}LIST${NC} → ${GREEN}INSTALL${NC} → ${RED}UNINSTALL${NC} → ${WHITE}LIST${NC}${NC}"
     echo
     
+    # Draw software list
     for i in "${!SOFTWARE_NAMES[@]}"; do
         local sw="${SOFTWARE_NAMES[$i]}"
         local desc="${SOFTWARE_DESCRIPTIONS[$i]}"
-        local state=${SOFTWARE_STATES[$sw]}
+        local state="${SOFTWARE_STATES[$i]}"
         local state_display=$(get_state_display $state)
         
-        local installed_status=""
+        # Check if installed
+        local status=""
         if command_exists "$sw"; then
-            installed_status=" ${GREEN}✓ INSTALLED${NC}"
+            status=" ${GREEN}✓${NC}"
         fi
         
-        echo -e "  $(($i + 1)). $state_display $desc$installed_status"
+        # Highlight current row
+        if [ $i -eq $CURRENT_ROW ]; then
+            echo -e " ${YELLOW}▶${NC} $state_display $desc$status"
+        else
+            echo -e "   $state_display $desc$status"
+        fi
     done
     
     echo
-    echo -e "${BLUE}================================================================${NC}"
-    echo -e "${YELLOW}States:${NC} ${WHITE}[LIST]${NC} = No action, ${GREEN}[INSTALL]${NC} = Will install, ${RED}[UNINSTALL]${NC} = Will remove"
+    echo -e "${BLUE}══════════════════════════════════════════════════════════════${NC}"
 }
 
-# Function to execute all selected actions
+# Read key with proper handling
+read_key() {
+    local key
+    # Use timeout to avoid hanging
+    if read -rsn1 -t 0.1 key 2>/dev/null; then
+        if [[ $key == $'\033' ]]; then
+            # Handle escape sequences
+            if read -rsn2 -t 0.1 key 2>/dev/null; then
+                case $key in
+                    '[A') echo "UP" ;;
+                    '[B') echo "DOWN" ;;
+                    *) echo "OTHER" ;;
+                esac
+            else
+                echo "ESC"
+            fi
+        else
+            case $key in
+                ' ') echo "SPACE" ;;
+                $'\n'|$'\r') echo "ENTER" ;;
+                'q'|'Q') echo "QUIT" ;;
+                'k') echo "UP" ;;      # vim-style
+                'j') echo "DOWN" ;;    # vim-style
+                *) echo "OTHER" ;;
+            esac
+        fi
+    else
+        echo "TIMEOUT"
+    fi
+}
+
+# Execute selected actions
 execute_actions() {
-    local actions_found=false
+    local actions=()
     
-    echo
-    echo -e "${BLUE}================================================================${NC}"
-    echo -e "${BLUE}                    Executing Actions${NC}"
-    echo -e "${BLUE}================================================================${NC}"
-    echo
-    
-    for sw in "${SOFTWARE_NAMES[@]}"; do
-        local state=${SOFTWARE_STATES[$sw]}
+    # Collect actions
+    for i in "${!SOFTWARE_NAMES[@]}"; do
+        local sw="${SOFTWARE_NAMES[$i]}"
+        local state="${SOFTWARE_STATES[$i]}"
         
         case $state in
-            1) # Install
-                actions_found=true
-                install_$sw
-                echo
-                ;;
-            2) # Uninstall
-                actions_found=true
-                uninstall_$sw
-                echo
-                ;;
+            1) actions+=("install_$sw:Installing $sw") ;;
+            2) actions+=("uninstall_$sw:Uninstalling $sw") ;;
         esac
     done
     
-    if [ "$actions_found" = false ]; then
-        print_warning "No actions selected. Nothing to do."
-    else
-        print_success "All actions completed!"
-        
-        # Reset all states to LIST
-        for sw in "${SOFTWARE_NAMES[@]}"; do
-            SOFTWARE_STATES[$sw]=0
-        done
+    if [ ${#actions[@]} -eq 0 ]; then
+        show_cursor
+        clear
+        print_warning "No actions selected!"
+        echo
+        read -p "Press Enter to continue..." -r
+        return
     fi
     
+    # Execute actions
+    show_cursor
+    clear
+    echo -e "${BLUE}══════════════════════════════════════════════════════════════${NC}"
+    echo -e "${BLUE}                     Executing Actions${NC}"
+    echo -e "${BLUE}══════════════════════════════════════════════════════════════${NC}"
     echo
-    get_input "Press Enter to continue..."
+    
+    for action in "${actions[@]}"; do
+        IFS=':' read -r func desc <<< "$action"
+        echo -e "${YELLOW}$desc...${NC}"
+        $func
+        echo
+    done
+    
+    print_success "All actions completed!"
+    
+    # Reset states
+    for i in "${!SOFTWARE_STATES[@]}"; do
+        SOFTWARE_STATES[$i]=0
+    done
+    
+    echo
+    read -p "Press Enter to continue..." -r
 }
 
-# Function to get user input (works even when piped)
+# Main interactive loop
+main_loop() {
+    # Set up terminal
+    hide_cursor
+    
+    # Handle terminal restoration on exit
+    trap 'show_cursor; clear; exit 0' EXIT INT TERM
+    
+    while true; do
+        draw_interface
+        
+        local key=$(read_key)
+        
+        case $key in
+            "UP")
+                CURRENT_ROW=$(( (CURRENT_ROW - 1 + TOTAL_ITEMS) % TOTAL_ITEMS ))
+                ;;
+            "DOWN") 
+                CURRENT_ROW=$(( (CURRENT_ROW + 1) % TOTAL_ITEMS ))
+                ;;
+            "SPACE")
+                SOFTWARE_STATES[$CURRENT_ROW]=$(( (SOFTWARE_STATES[$CURRENT_ROW] + 1) % 3 ))
+                ;;
+            "ENTER")
+                execute_actions
+                hide_cursor
+                ;;
+            "QUIT")
+                break
+                ;;
+            "TIMEOUT")
+                # Continue loop on timeout (keeps interface responsive)
+                ;;
+        esac
+        
+        # Small delay to prevent excessive CPU usage
+        sleep 0.05
+    done
+    
+    show_cursor
+    clear
+    print_info "Thanks for using the software installer!"
+}
+
+# Get input that works with pipes
 get_input() {
     local prompt="$1"
     local response
     
-    # If stdin is not a terminal (piped), redirect from /dev/tty
     if [ ! -t 0 ]; then
-        read -p "$prompt" response < /dev/tty
-    else
-        read -p "$prompt" response
+        exec < /dev/tty
     fi
     
+    read -p "$prompt" -r response
     echo "$response"
-}
-
-# Main menu function
-main_menu() {
-    while true; do
-        show_status
-        echo
-        echo -e "${YELLOW}Options:${NC}"
-        echo "1-3) Toggle state for software (LIST → INSTALL → UNINSTALL → LIST)"
-        echo "4) Execute all selected actions"
-        echo "5) Reset all to LIST state"
-        echo "6) Quit"
-        echo
-        
-        local choice=$(get_input "Enter your choice (1-6): ")
-        
-        case $choice in
-            1|2|3)
-                local index=$((choice - 1))
-                if [ $index -ge 0 ] && [ $index -lt ${#SOFTWARE_NAMES[@]} ]; then
-                    local sw="${SOFTWARE_NAMES[$index]}"
-                    cycle_state "$sw"
-                    local new_state=$(get_state_display ${SOFTWARE_STATES[$sw]})
-                    echo -e "\n${YELLOW}Toggled${NC} ${SOFTWARE_DESCRIPTIONS[$index]} to $new_state"
-                    sleep 1
-                else
-                    print_error "Invalid selection"
-                    sleep 1
-                fi
-                ;;
-            4)
-                execute_actions
-                ;;
-            5)
-                for sw in "${SOFTWARE_NAMES[@]}"; do
-                    SOFTWARE_STATES[$sw]=0
-                done
-                print_info "All states reset to LIST"
-                sleep 1
-                ;;
-            6)
-                clear
-                print_info "Thanks for using the software installer!"
-                exit 0
-                ;;
-            *)
-                print_error "Invalid choice. Please select 1-6."
-                sleep 1
-                ;;
-        esac
-    done
 }
 
 # Main function
 main() {
-    # Check if running on Ubuntu/Debian
+    # System checks
     if ! command_exists apt-get; then
         print_error "This script requires apt-get (Ubuntu/Debian). Exiting."
         exit 1
     fi
     
-    # Make sure script is not run as root
     if [ "$EUID" -eq 0 ]; then
         print_error "Please do not run this script as root (sudo). It will ask for sudo when needed."
         exit 1
     fi
     
-    # Show initial warning
+    # Initial confirmation
     clear
-    echo -e "${YELLOW}================================================================${NC}"
-    echo -e "${YELLOW} Interactive Software Installer${NC}"
-    echo -e "${YELLOW} Repository: https://github.com/bhagyajitjagdev/software-installer${NC}"
-    echo -e "${YELLOW}================================================================${NC}"
+    echo -e "${YELLOW}╔══════════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${YELLOW}║${NC} ${BOLD}Interactive Software Installer${NC}                              ${YELLOW}║${NC}"
+    echo -e "${YELLOW}║${NC} Repository: https://github.com/bhagyajitjagdev/software-installer ${YELLOW}║${NC}"
+    echo -e "${YELLOW}╚══════════════════════════════════════════════════════════════╝${NC}"
     echo
     echo -e "${YELLOW}WARNING:${NC} You are about to run a software installer script."
-    echo -e "${YELLOW}Please review the code at the repository above.${NC}"
     echo
     
     local confirm=$(get_input "Do you want to continue? (y/N): ")
     if [[ ! $confirm =~ ^[Yy]$ ]]; then
-        print_info "Installation cancelled by user."
+        print_info "Installation cancelled."
         exit 0
     fi
     
-    # Start the main menu
-    main_menu
+    # Start interactive interface
+    main_loop
 }
 
-# Handle interruption gracefully
-trap 'clear; print_info "Script interrupted. Goodbye!"; exit 1' INT TERM
-
-# Run main function
+# Run the script
 main "$@"
