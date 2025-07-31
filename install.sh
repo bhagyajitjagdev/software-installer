@@ -215,7 +215,22 @@ execute_actions() {
     fi
     
     echo
-    read -p "Press Enter to continue..."
+    get_input "Press Enter to continue..."
+}
+
+# Function to get user input (works even when piped)
+get_input() {
+    local prompt="$1"
+    local response
+    
+    # If stdin is not a terminal (piped), redirect from /dev/tty
+    if [ ! -t 0 ]; then
+        read -p "$prompt" response < /dev/tty
+    else
+        read -p "$prompt" response
+    fi
+    
+    echo "$response"
 }
 
 # Main menu function
@@ -230,7 +245,7 @@ main_menu() {
         echo "6) Quit"
         echo
         
-        read -p "Enter your choice (1-6): " choice
+        local choice=$(get_input "Enter your choice (1-6): ")
         
         case $choice in
             1|2|3)
@@ -294,13 +309,10 @@ main() {
     echo -e "${YELLOW}Please review the code at the repository above.${NC}"
     echo
     
-    # Only ask for confirmation if running interactively
-    if [ -t 0 ]; then
-        read -p "Do you want to continue? (y/N): " confirm
-        if [[ ! $confirm =~ ^[Yy]$ ]]; then
-            print_info "Installation cancelled by user."
-            exit 0
-        fi
+    local confirm=$(get_input "Do you want to continue? (y/N): ")
+    if [[ ! $confirm =~ ^[Yy]$ ]]; then
+        print_info "Installation cancelled by user."
+        exit 0
     fi
     
     # Start the main menu
