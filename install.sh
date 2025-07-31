@@ -24,6 +24,7 @@ SOFTWARE_LIST=(
     "productivity:productivity_tools:Productivity Tools:none:group"
     "productivity:bat:bat - Better Cat with Syntax Highlighting:install_bat:software"
     "productivity:gdu:gdu - Fast disk usage analyzer:install_gdu:software"
+    "productivity:fzf:fzf - General-purpose command-line fuzzy finder:install_fzf:software"
 )
 
 # Current selection and states
@@ -105,6 +106,16 @@ install_gdu() {
     print_success "gdu installed successfully"
 }
 
+install_fzf() {
+    print_info "Installing fzf..."
+    if command_exists fzf; then
+        print_warning "fzf is already installed"
+        return 0
+    fi
+    sudo apt-get update -qq && sudo apt-get install -y fzf
+    print_success "fzf installed successfully"
+}
+
 install_bat() {
     print_info "Installing bat..."
     if command_exists bat || command_exists batcat; then
@@ -143,6 +154,12 @@ uninstall_gdu() {
     print_info "Uninstalling gdu..."
     sudo apt-get remove -y gdu
     print_success "gdu uninstalled"
+}
+
+uninstall_fzf() {
+    print_info "Uninstalling fzf..."
+    sudo apt-get remove -y fzf
+    print_success "fzf uninstalled"
 }
 
 uninstall_bat() {
