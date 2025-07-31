@@ -335,24 +335,19 @@ main() {
         exit 1
     fi
     
-    # Skip confirmation if --yes flag is passed or if not running interactively
-    if [[ "$1" == "--yes" ]] || [[ "$1" == "-y" ]] || [ ! -t 0 ]; then
-        print_info "Starting interactive software installer..."
-    else
-        clear
-        echo -e "${YELLOW}╔══════════════════════════════════════════════════════════════╗${NC}"
-        echo -e "${YELLOW}║${NC} ${BOLD}Interactive Software Installer${NC}                              ${YELLOW}║${NC}"
-        echo -e "${YELLOW}║${NC} Repository: https://github.com/bhagyajitjagdev/software-installer ${YELLOW}║${NC}"
-        echo -e "${YELLOW}╚══════════════════════════════════════════════════════════════╝${NC}"
-        echo
-        echo -e "${YELLOW}WARNING:${NC} You are about to run a software installer script."
-        echo
-        
-        read -p "Do you want to continue? (y/N): " confirm
-        if [[ ! $confirm =~ ^[Yy]$ ]]; then
-            print_info "Installation cancelled."
-            exit 0
-        fi
+    clear
+    echo -e "${YELLOW}╔══════════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${YELLOW}║${NC} ${BOLD}Interactive Software Installer${NC}                              ${YELLOW}║${NC}"
+    echo -e "${YELLOW}║${NC} Repository: https://github.com/bhagyajitjagdev/software-installer ${YELLOW}║${NC}"
+    echo -e "${YELLOW}╚══════════════════════════════════════════════════════════════╝${NC}"
+    echo
+    echo -e "${YELLOW}WARNING:${NC} You are about to run a software installer script."
+    echo
+    
+    read -p "Do you want to continue? (y/N): " confirm
+    if [[ ! $confirm =~ ^[Yy]$ ]]; then
+        print_info "Installation cancelled."
+        exit 0
     fi
     
     main_loop
