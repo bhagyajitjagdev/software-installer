@@ -32,9 +32,6 @@ bash <(curl -fsSL https://raw.githubusercontent.com/bhagyajitjagdev/software-ins
 wget https://raw.githubusercontent.com/bhagyajitjagdev/software-installer/main/install.sh
 chmod +x install.sh
 ./install.sh
-
-# With explicit confirmation skip
-curl -fsSL https://raw.githubusercontent.com/bhagyajitjagdev/software-installer/main/install.sh | bash -s -- --yes
 ```
 
 ## 🎮 Controls
@@ -62,7 +59,7 @@ curl -fsSL https://raw.githubusercontent.com/bhagyajitjagdev/software-installer/
 
 ```
 ╔══════════════════════════════════════════════════════════════╗
-║              Interactive Software Installer              ║
+║              Interactive Software Installer                  ║
 ║        Repository: bhagyajitjagdev/software-installer        ║
 ╚══════════════════════════════════════════════════════════════╝
 

@@ -153,9 +153,13 @@ parse_software_entry() {
 # Draw interface
 draw_interface() {
     clear
+    local WIDTH=62
+    local TITLE="Interactive Software Installer"
+    local REPO="Repository: bhagyajitjagdev/software-installer"
+
     echo -e "${BLUE}╔══════════════════════════════════════════════════════════════╗${NC}"
-    echo -e "${BLUE}║${NC}              ${BOLD}Interactive Software Installer${NC}              ${BLUE}║${NC}"
-    echo -e "${BLUE}║${NC}        Repository: bhagyajitjagdev/software-installer        ${BLUE}║${NC}"
+    printf "${BLUE}║${NC}%-62s${BLUE}║${NC}\n" "$(printf "%*s" $(((${#TITLE} + WIDTH)/2)) "$TITLE")"
+    printf "${BLUE}║${NC}%-62s${BLUE}║${NC}\n" "$(printf "%*s" $(((${#REPO} + WIDTH)/2)) "$REPO")"
     echo -e "${BLUE}╚══════════════════════════════════════════════════════════════╝${NC}"
     echo
     echo -e "${YELLOW}Controls: ↑↓ Navigate | S Select/Cycle | R Run Actions | Q Quit${NC}"
@@ -336,10 +340,14 @@ main() {
     fi
     
     clear
-    echo -e "${YELLOW}╔══════════════════════════════════════════════════════════════╗${NC}"
-    echo -e "${YELLOW}║${NC} ${BOLD}Interactive Software Installer${NC}                              ${YELLOW}║${NC}"
-    echo -e "${YELLOW}║${NC} Repository: https://github.com/bhagyajitjagdev/software-installer ${YELLOW}║${NC}"
-    echo -e "${YELLOW}╚══════════════════════════════════════════════════════════════╝${NC}"
+    local WIDTH=62
+    local TITLE="Interactive Software Installer"
+    local REPO="Repository: bhagyajitjagdev/software-installer"
+
+    echo -e "${BLUE}╔══════════════════════════════════════════════════════════════╗${NC}"
+    printf "${BLUE}║${NC}%-62s${BLUE}║${NC}\n" "$(printf "%*s" $(((${#TITLE} + WIDTH)/2)) "$TITLE")"
+    printf "${BLUE}║${NC}%-62s${BLUE}║${NC}\n" "$(printf "%*s" $(((${#REPO} + WIDTH)/2)) "$REPO")"
+    echo -e "${BLUE}╚══════════════════════════════════════════════════════════════╝${NC}"
     echo
     echo -e "${YELLOW}WARNING:${NC} You are about to run a software installer script."
     echo
