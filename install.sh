@@ -145,23 +145,180 @@ draw_interface() {
     echo -e "${BLUE}══════════════════════════════════════════════════════════════${NC}"
 }
 
-# Read a single key with proper escape sequence handling
+# Read a single key with better escape sequence handling
 read_key() {
     local key
-    local key2
-    local key3
     
-    # Read first character
-    read -rsn1 key
+    # Use dd to read exactly one byte at a time
+    key=$(dd bs=1 count=1 2>/dev/null)
     
     # Check if it's an escape sequence
-    if [[ $key == $'\033' ]]; then
-        # Read the next character
-        read -rsn1 -t 0.001 key2
-        if [[ $key2 == '[' ]]; then
-            # Read the final character
-            read -rsn1 -t 0.001 key3
-            case $key3 in
+    if [[ $key == 
+
+# Execute selected actions
+execute_actions() {
+    local actions=()
+    
+    # Collect actions
+    for i in "${!SOFTWARE_NAMES[@]}"; do
+        local sw="${SOFTWARE_NAMES[$i]}"
+        local state="${SOFTWARE_STATES[$i]}"
+        
+        case $state in
+            1) actions+=("install_$sw:Installing $sw") ;;
+            2) actions+=("uninstall_$sw:Uninstalling $sw") ;;
+        esac
+    done
+    
+    if [ ${#actions[@]} -eq 0 ]; then
+        clear
+        print_warning "No actions selected!"
+        echo
+        read -p "Press Enter to continue..." -r
+        return
+    fi
+    
+    # Execute actions
+    clear
+    echo -e "${BLUE}══════════════════════════════════════════════════════════════${NC}"
+    echo -e "${BLUE}                     Executing Actions${NC}"
+    echo -e "${BLUE}══════════════════════════════════════════════════════════════${NC}"
+    echo
+    
+    for action in "${actions[@]}"; do
+        IFS=':' read -r func desc <<< "$action"
+        echo -e "${YELLOW}$desc...${NC}"
+        $func
+        echo
+    done
+    
+    print_success "All actions completed!"
+    
+    # Reset states
+    for i in "${!SOFTWARE_STATES[@]}"; do
+        SOFTWARE_STATES[$i]=0
+    done
+    
+    echo
+    read -p "Press Enter to continue..." -r
+}
+
+# Main interactive loop - ONLY redraw when needed
+main_loop() {
+    local need_redraw=true
+    local old_stty
+    
+    # Save current terminal settings and set raw mode
+    old_stty=$(stty -g)
+    stty raw -echo
+    
+    # Cleanup function
+    cleanup() {
+        stty "$old_stty"
+        clear
+        print_info "Thanks for using the software installer!"
+    }
+    
+    # Set trap for cleanup
+    trap cleanup EXIT INT TERM
+    
+    while true; do
+        # Only redraw if needed
+        if [ "$need_redraw" = true ]; then
+            draw_interface
+            need_redraw=false
+        fi
+        
+        # Read key (this blocks until key is pressed)
+        local key=$(read_key)
+        
+        case $key in
+            "UP")
+                CURRENT_ROW=$(( (CURRENT_ROW - 1 + TOTAL_ITEMS) % TOTAL_ITEMS ))
+                need_redraw=true
+                ;;
+            "DOWN") 
+                CURRENT_ROW=$(( (CURRENT_ROW + 1) % TOTAL_ITEMS ))
+                need_redraw=true
+                ;;
+            "SPACE")
+                SOFTWARE_STATES[$CURRENT_ROW]=$(( (SOFTWARE_STATES[$CURRENT_ROW] + 1) % 3 ))
+                need_redraw=true
+                ;;
+            "ENTER")
+                # Restore terminal for command execution
+                stty "$old_stty"
+                execute_actions
+                # Set back to raw mode
+                stty raw -echo
+                need_redraw=true
+                ;;
+            "QUIT")
+                break
+                ;;
+            *)
+                # Do nothing for other keys, don't redraw
+                ;;
+        esac
+    done
+    
+    # Cleanup will be called by trap
+}
+
+# Get input that works with pipes
+get_input() {
+    local prompt="$1"
+    local response
+    
+    if [ ! -t 0 ]; then
+        exec < /dev/tty
+    fi
+    
+    read -p "$prompt" -r response
+    echo "$response"
+}
+
+# Main function
+main() {
+    # System checks
+    if ! command_exists apt-get; then
+        print_error "This script requires apt-get (Ubuntu/Debian). Exiting."
+        exit 1
+    fi
+    
+    if [ "$EUID" -eq 0 ]; then
+        print_error "Please do not run this script as root (sudo). It will ask for sudo when needed."
+        exit 1
+    fi
+    
+    # Initial confirmation
+    clear
+    echo -e "${YELLOW}╔══════════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${YELLOW}║${NC} ${BOLD}Interactive Software Installer${NC}                              ${YELLOW}║${NC}"
+    echo -e "${YELLOW}║${NC} Repository: https://github.com/bhagyajitjagdev/software-installer ${YELLOW}║${NC}"
+    echo -e "${YELLOW}╚══════════════════════════════════════════════════════════════╝${NC}"
+    echo
+    echo -e "${YELLOW}WARNING:${NC} You are about to run a software installer script."
+    echo
+    
+    local confirm=$(get_input "Do you want to continue? (y/N): ")
+    if [[ ! $confirm =~ ^[Yy]$ ]]; then
+        print_info "Installation cancelled."
+        exit 0
+    fi
+    
+    # Start interactive interface
+    main_loop
+}
+
+# Run the script
+main "$@"\033' ]]; then
+        # Read the bracket
+        local bracket=$(dd bs=1 count=1 2>/dev/null)
+        if [[ $bracket == '[' ]]; then
+            # Read the direction
+            local direction=$(dd bs=1 count=1 2>/dev/null)
+            case $direction in
                 'A') echo "UP" ;;
                 'B') echo "DOWN" ;;
                 *) echo "OTHER" ;;
@@ -172,7 +329,289 @@ read_key() {
     else
         case $key in
             ' ') echo "SPACE" ;;
-            $'\n'|$'\r') echo "ENTER" ;;
+            
+
+# Execute selected actions
+execute_actions() {
+    local actions=()
+    
+    # Collect actions
+    for i in "${!SOFTWARE_NAMES[@]}"; do
+        local sw="${SOFTWARE_NAMES[$i]}"
+        local state="${SOFTWARE_STATES[$i]}"
+        
+        case $state in
+            1) actions+=("install_$sw:Installing $sw") ;;
+            2) actions+=("uninstall_$sw:Uninstalling $sw") ;;
+        esac
+    done
+    
+    if [ ${#actions[@]} -eq 0 ]; then
+        clear
+        print_warning "No actions selected!"
+        echo
+        read -p "Press Enter to continue..." -r
+        return
+    fi
+    
+    # Execute actions
+    clear
+    echo -e "${BLUE}══════════════════════════════════════════════════════════════${NC}"
+    echo -e "${BLUE}                     Executing Actions${NC}"
+    echo -e "${BLUE}══════════════════════════════════════════════════════════════${NC}"
+    echo
+    
+    for action in "${actions[@]}"; do
+        IFS=':' read -r func desc <<< "$action"
+        echo -e "${YELLOW}$desc...${NC}"
+        $func
+        echo
+    done
+    
+    print_success "All actions completed!"
+    
+    # Reset states
+    for i in "${!SOFTWARE_STATES[@]}"; do
+        SOFTWARE_STATES[$i]=0
+    done
+    
+    echo
+    read -p "Press Enter to continue..." -r
+}
+
+# Main interactive loop - ONLY redraw when needed
+main_loop() {
+    local need_redraw=true
+    
+    while true; do
+        # Only redraw if needed
+        if [ "$need_redraw" = true ]; then
+            draw_interface
+            need_redraw=false
+        fi
+        
+        # Read key (this blocks until key is pressed)
+        local key=$(read_key)
+        
+        case $key in
+            "UP")
+                CURRENT_ROW=$(( (CURRENT_ROW - 1 + TOTAL_ITEMS) % TOTAL_ITEMS ))
+                need_redraw=true
+                ;;
+            "DOWN") 
+                CURRENT_ROW=$(( (CURRENT_ROW + 1) % TOTAL_ITEMS ))
+                need_redraw=true
+                ;;
+            "SPACE")
+                SOFTWARE_STATES[$CURRENT_ROW]=$(( (SOFTWARE_STATES[$CURRENT_ROW] + 1) % 3 ))
+                need_redraw=true
+                ;;
+            "ENTER")
+                execute_actions
+                need_redraw=true
+                ;;
+            "QUIT")
+                break
+                ;;
+            *)
+                # Do nothing for other keys, don't redraw
+                ;;
+        esac
+    done
+    
+    clear
+    print_info "Thanks for using the software installer!"
+}
+
+# Get input that works with pipes
+get_input() {
+    local prompt="$1"
+    local response
+    
+    if [ ! -t 0 ]; then
+        exec < /dev/tty
+    fi
+    
+    read -p "$prompt" -r response
+    echo "$response"
+}
+
+# Main function
+main() {
+    # System checks
+    if ! command_exists apt-get; then
+        print_error "This script requires apt-get (Ubuntu/Debian). Exiting."
+        exit 1
+    fi
+    
+    if [ "$EUID" -eq 0 ]; then
+        print_error "Please do not run this script as root (sudo). It will ask for sudo when needed."
+        exit 1
+    fi
+    
+    # Initial confirmation
+    clear
+    echo -e "${YELLOW}╔══════════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${YELLOW}║${NC} ${BOLD}Interactive Software Installer${NC}                              ${YELLOW}║${NC}"
+    echo -e "${YELLOW}║${NC} Repository: https://github.com/bhagyajitjagdev/software-installer ${YELLOW}║${NC}"
+    echo -e "${YELLOW}╚══════════════════════════════════════════════════════════════╝${NC}"
+    echo
+    echo -e "${YELLOW}WARNING:${NC} You are about to run a software installer script."
+    echo
+    
+    local confirm=$(get_input "Do you want to continue? (y/N): ")
+    if [[ ! $confirm =~ ^[Yy]$ ]]; then
+        print_info "Installation cancelled."
+        exit 0
+    fi
+    
+    # Start interactive interface
+    main_loop
+}
+
+# Run the script
+main "$@"\n'|
+
+# Execute selected actions
+execute_actions() {
+    local actions=()
+    
+    # Collect actions
+    for i in "${!SOFTWARE_NAMES[@]}"; do
+        local sw="${SOFTWARE_NAMES[$i]}"
+        local state="${SOFTWARE_STATES[$i]}"
+        
+        case $state in
+            1) actions+=("install_$sw:Installing $sw") ;;
+            2) actions+=("uninstall_$sw:Uninstalling $sw") ;;
+        esac
+    done
+    
+    if [ ${#actions[@]} -eq 0 ]; then
+        clear
+        print_warning "No actions selected!"
+        echo
+        read -p "Press Enter to continue..." -r
+        return
+    fi
+    
+    # Execute actions
+    clear
+    echo -e "${BLUE}══════════════════════════════════════════════════════════════${NC}"
+    echo -e "${BLUE}                     Executing Actions${NC}"
+    echo -e "${BLUE}══════════════════════════════════════════════════════════════${NC}"
+    echo
+    
+    for action in "${actions[@]}"; do
+        IFS=':' read -r func desc <<< "$action"
+        echo -e "${YELLOW}$desc...${NC}"
+        $func
+        echo
+    done
+    
+    print_success "All actions completed!"
+    
+    # Reset states
+    for i in "${!SOFTWARE_STATES[@]}"; do
+        SOFTWARE_STATES[$i]=0
+    done
+    
+    echo
+    read -p "Press Enter to continue..." -r
+}
+
+# Main interactive loop - ONLY redraw when needed
+main_loop() {
+    local need_redraw=true
+    
+    while true; do
+        # Only redraw if needed
+        if [ "$need_redraw" = true ]; then
+            draw_interface
+            need_redraw=false
+        fi
+        
+        # Read key (this blocks until key is pressed)
+        local key=$(read_key)
+        
+        case $key in
+            "UP")
+                CURRENT_ROW=$(( (CURRENT_ROW - 1 + TOTAL_ITEMS) % TOTAL_ITEMS ))
+                need_redraw=true
+                ;;
+            "DOWN") 
+                CURRENT_ROW=$(( (CURRENT_ROW + 1) % TOTAL_ITEMS ))
+                need_redraw=true
+                ;;
+            "SPACE")
+                SOFTWARE_STATES[$CURRENT_ROW]=$(( (SOFTWARE_STATES[$CURRENT_ROW] + 1) % 3 ))
+                need_redraw=true
+                ;;
+            "ENTER")
+                execute_actions
+                need_redraw=true
+                ;;
+            "QUIT")
+                break
+                ;;
+            *)
+                # Do nothing for other keys, don't redraw
+                ;;
+        esac
+    done
+    
+    clear
+    print_info "Thanks for using the software installer!"
+}
+
+# Get input that works with pipes
+get_input() {
+    local prompt="$1"
+    local response
+    
+    if [ ! -t 0 ]; then
+        exec < /dev/tty
+    fi
+    
+    read -p "$prompt" -r response
+    echo "$response"
+}
+
+# Main function
+main() {
+    # System checks
+    if ! command_exists apt-get; then
+        print_error "This script requires apt-get (Ubuntu/Debian). Exiting."
+        exit 1
+    fi
+    
+    if [ "$EUID" -eq 0 ]; then
+        print_error "Please do not run this script as root (sudo). It will ask for sudo when needed."
+        exit 1
+    fi
+    
+    # Initial confirmation
+    clear
+    echo -e "${YELLOW}╔══════════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${YELLOW}║${NC} ${BOLD}Interactive Software Installer${NC}                              ${YELLOW}║${NC}"
+    echo -e "${YELLOW}║${NC} Repository: https://github.com/bhagyajitjagdev/software-installer ${YELLOW}║${NC}"
+    echo -e "${YELLOW}╚══════════════════════════════════════════════════════════════╝${NC}"
+    echo
+    echo -e "${YELLOW}WARNING:${NC} You are about to run a software installer script."
+    echo
+    
+    local confirm=$(get_input "Do you want to continue? (y/N): ")
+    if [[ ! $confirm =~ ^[Yy]$ ]]; then
+        print_info "Installation cancelled."
+        exit 0
+    fi
+    
+    # Start interactive interface
+    main_loop
+}
+
+# Run the script
+main "$@"\r') echo "ENTER" ;;
             'q'|'Q') echo "QUIT" ;;
             'k'|'K') echo "UP" ;;
             'j'|'J') echo "DOWN" ;;
