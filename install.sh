@@ -15,21 +15,19 @@ WHITE='\033[1;37m'
 NC='\033[0m' # No Color
 BOLD='\033[1m'
 
-# Highlight colors for selection
-HIGHLIGHT='\033[7m'  # Reverse video
-NORMAL='\033[0m'
-
 # Software list with their states
-# Format: "software_name:display_name:current_state:install_function"
-SOFTWARE_LIST=(
-    "htop:htop - Interactive Process Viewer:0:install_htop"
-    "nmap:nmap - Network Discovery Tool:0:install_nmap"
-    "curl:curl - Command Line HTTP Client:0:install_curl"
+declare -A SOFTWARE_STATES
+SOFTWARE_NAMES=("htop" "nmap" "curl")
+SOFTWARE_DESCRIPTIONS=(
+    "htop - Interactive Process Viewer"
+    "nmap - Network Discovery Tool"
+    "curl - Command Line HTTP Client"
 )
 
-# State meanings: 0=white/list, 1=green/install, 2=red/uninstall
-CURRENT_SELECTION=0
-TOTAL_SOFTWARE=${#SOFTWARE_LIST[@]}
+# Initialize all states to 0 (LIST)
+for sw in "${SOFTWARE_NAMES[@]}"; do
+    SOFTWARE_STATES[$sw]=0
+done
 
 # Function to print colored output
 print_info() {
@@ -58,8 +56,7 @@ update_bashrc() {
     local content="$1"
     local description="$2"
     
-    # Check if the content already exists in ~/.bashrc
-    if ! grep -Fxq "$content" ~/.bashrc; then
+    if ! grep -Fxq "$content" ~/.bashrc 2>/dev/null; then
         echo "" >> ~/.bashrc
         echo "# $description" >> ~/.bashrc
         echo "$content" >> ~/.bashrc
@@ -69,7 +66,7 @@ update_bashrc() {
     fi
 }
 
-# Function to get state color and text
+# Function to get state display
 get_state_display() {
     local state=$1
     case $state in
@@ -79,79 +76,11 @@ get_state_display() {
     esac
 }
 
-# Function to draw the interface
-draw_interface() {
-    clear
-    
-    # Header
-    echo -e "${BLUE}================================================================${NC}"
-    echo -e "${BLUE}              Interactive Software Installer${NC}"
-    echo -e "${BLUE}        Repository: bhagyajitjagdev/software-installer${NC}"
-    echo -e "${BLUE}================================================================${NC}"
-    echo
-    echo -e "${YELLOW}Navigation:${NC} j/k or ↑↓ arrows, SPACE to cycle states, ENTER to execute, q to quit"
-    echo -e "${YELLOW}States:${NC} ${WHITE}[LIST]${NC} → ${GREEN}[INSTALL]${NC} → ${RED}[UNINSTALL]${NC}"
-    echo
-    
-    # Software list
-    for i in "${!SOFTWARE_LIST[@]}"; do
-        IFS=':' read -r sw_name display_name state install_func <<< "${SOFTWARE_LIST[$i]}"
-        
-        local state_display=$(get_state_display $state)
-        
-        # Check if software is already installed
-        local installed_status=""
-        if command_exists "$sw_name"; then
-            installed_status=" ${GREEN}✓ INSTALLED${NC}"
-        fi
-        
-        # Highlight current selection
-        if [ $i -eq $CURRENT_SELECTION ]; then
-            echo -e "${HIGHLIGHT} ▶ $state_display $display_name$installed_status ${NC}"
-        else
-            echo -e "   $state_display $display_name$installed_status"
-        fi
-    done
-    
-    echo
-    echo -e "${BLUE}================================================================${NC}"
-    echo -e "Use j/k keys or arrow keys to navigate, SPACE to select action, ENTER to execute"
-}
-
-# Function to read a single key
-read_single_key() {
-    local key
-    read -rsn1 key
-    
-    # Handle escape sequences (arrow keys)
-    if [[ $key == $'\033' ]]; then
-        read -rsn2 -t 0.1 key
-        case "$key" in
-            '[A') echo "UP" ;;
-            '[B') echo "DOWN" ;;
-            *) echo "ESC" ;;
-        esac
-    else
-        case "$key" in
-            'j'|'J') echo "DOWN" ;;
-            'k'|'K') echo "UP" ;;
-            ' ') echo "SPACE" ;;
-            $'\n'|$'\r') echo "ENTER" ;;
-            'q'|'Q') echo "QUIT" ;;
-            *) echo "OTHER" ;;
-        esac
-    fi
-}
-
-# Function to cycle software state
+# Function to cycle state
 cycle_state() {
-    local index=$1
-    IFS=':' read -r sw_name display_name state install_func <<< "${SOFTWARE_LIST[$index]}"
-    
-    # Cycle: 0 -> 1 -> 2 -> 0
-    state=$(( (state + 1) % 3 ))
-    
-    SOFTWARE_LIST[$index]="$sw_name:$display_name:$state:$install_func"
+    local software=$1
+    local current_state=${SOFTWARE_STATES[$software]}
+    SOFTWARE_STATES[$software]=$(( (current_state + 1) % 3 ))
 }
 
 # Installation functions
@@ -167,7 +96,6 @@ install_htop() {
     sudo apt-get install -y htop
     
     print_success "htop installed successfully"
-    return 0
 }
 
 install_nmap() {
@@ -182,7 +110,6 @@ install_nmap() {
     sudo apt-get install -y nmap
     
     print_success "nmap installed successfully"
-    return 0
 }
 
 install_curl() {
@@ -196,14 +123,12 @@ install_curl() {
     sudo apt-get update -qq
     sudo apt-get install -y curl
     
-    # Add useful curl aliases
     update_bashrc 'alias curl-json="curl -H \"Content-Type: application/json\""' "Curl JSON alias"
     
     print_success "curl installed successfully"
-    return 0
 }
 
-# Uninstallation functions
+# Uninstall functions
 uninstall_htop() {
     print_info "Uninstalling htop..."
     sudo apt-get remove -y htop
@@ -217,35 +142,62 @@ uninstall_nmap() {
 }
 
 uninstall_curl() {
-    print_info "Uninstalling curl..."
     print_warning "curl is a system dependency and shouldn't be uninstalled"
     print_info "Skipping curl uninstallation for system stability"
 }
 
-# Function to execute actions
+# Function to show current status
+show_status() {
+    clear
+    echo -e "${BLUE}================================================================${NC}"
+    echo -e "${BLUE}              Interactive Software Installer${NC}"
+    echo -e "${BLUE}        Repository: bhagyajitjagdev/software-installer${NC}"
+    echo -e "${BLUE}================================================================${NC}"
+    echo
+    echo -e "${YELLOW}Current Selection Status:${NC}"
+    echo
+    
+    for i in "${!SOFTWARE_NAMES[@]}"; do
+        local sw="${SOFTWARE_NAMES[$i]}"
+        local desc="${SOFTWARE_DESCRIPTIONS[$i]}"
+        local state=${SOFTWARE_STATES[$sw]}
+        local state_display=$(get_state_display $state)
+        
+        local installed_status=""
+        if command_exists "$sw"; then
+            installed_status=" ${GREEN}✓ INSTALLED${NC}"
+        fi
+        
+        echo -e "  $(($i + 1)). $state_display $desc$installed_status"
+    done
+    
+    echo
+    echo -e "${BLUE}================================================================${NC}"
+    echo -e "${YELLOW}States:${NC} ${WHITE}[LIST]${NC} = No action, ${GREEN}[INSTALL]${NC} = Will install, ${RED}[UNINSTALL]${NC} = Will remove"
+}
+
+# Function to execute all selected actions
 execute_actions() {
     local actions_found=false
     
-    clear
+    echo
     echo -e "${BLUE}================================================================${NC}"
     echo -e "${BLUE}                    Executing Actions${NC}"
     echo -e "${BLUE}================================================================${NC}"
     echo
     
-    for i in "${!SOFTWARE_LIST[@]}"; do
-        IFS=':' read -r sw_name display_name state install_func <<< "${SOFTWARE_LIST[$i]}"
+    for sw in "${SOFTWARE_NAMES[@]}"; do
+        local state=${SOFTWARE_STATES[$sw]}
         
         case $state in
             1) # Install
                 actions_found=true
-                echo -e "${GREEN}Installing: $display_name${NC}"
-                $install_func
+                install_$sw
                 echo
                 ;;
             2) # Uninstall
                 actions_found=true
-                echo -e "${RED}Uninstalling: $display_name${NC}"
-                uninstall_$sw_name
+                uninstall_$sw
                 echo
                 ;;
         esac
@@ -256,61 +208,65 @@ execute_actions() {
     else
         print_success "All actions completed!"
         
-        # Reset all states to 0 (list)
-        for i in "${!SOFTWARE_LIST[@]}"; do
-            IFS=':' read -r sw_name display_name state install_func <<< "${SOFTWARE_LIST[$i]}"
-            SOFTWARE_LIST[$i]="$sw_name:$display_name:0:$install_func"
+        # Reset all states to LIST
+        for sw in "${SOFTWARE_NAMES[@]}"; do
+            SOFTWARE_STATES[$sw]=0
         done
     fi
     
     echo
-    echo "Press any key to continue..."
-    read -rsn1
+    read -p "Press Enter to continue..."
 }
 
-# Main interactive loop
-main_loop() {
-    # Store original terminal settings
-    local old_tty_settings=$(stty -g)
-    
-    # Set terminal to raw mode for better key handling
-    stty -echo -icanon time 0 min 0
-    
+# Main menu function
+main_menu() {
     while true; do
-        draw_interface
+        show_status
+        echo
+        echo -e "${YELLOW}Options:${NC}"
+        echo "1-3) Toggle state for software (LIST → INSTALL → UNINSTALL → LIST)"
+        echo "4) Execute all selected actions"
+        echo "5) Reset all to LIST state"
+        echo "6) Quit"
+        echo
         
-        key=$(read_single_key)
+        read -p "Enter your choice (1-6): " choice
         
-        case "$key" in
-            "UP")
-                CURRENT_SELECTION=$(( (CURRENT_SELECTION - 1 + TOTAL_SOFTWARE) % TOTAL_SOFTWARE ))
+        case $choice in
+            1|2|3)
+                local index=$((choice - 1))
+                if [ $index -ge 0 ] && [ $index -lt ${#SOFTWARE_NAMES[@]} ]; then
+                    local sw="${SOFTWARE_NAMES[$index]}"
+                    cycle_state "$sw"
+                    local new_state=$(get_state_display ${SOFTWARE_STATES[$sw]})
+                    echo -e "\n${YELLOW}Toggled${NC} ${SOFTWARE_DESCRIPTIONS[$index]} to $new_state"
+                    sleep 1
+                else
+                    print_error "Invalid selection"
+                    sleep 1
+                fi
                 ;;
-            "DOWN")
-                CURRENT_SELECTION=$(( (CURRENT_SELECTION + 1) % TOTAL_SOFTWARE ))
-                ;;
-            "SPACE")
-                cycle_state $CURRENT_SELECTION
-                ;;
-            "ENTER")
-                # Restore terminal settings before executing
-                stty "$old_tty_settings"
+            4)
                 execute_actions
-                # Set back to raw mode
-                stty -echo -icanon time 0 min 0
                 ;;
-            "QUIT")
-                break
+            5)
+                for sw in "${SOFTWARE_NAMES[@]}"; do
+                    SOFTWARE_STATES[$sw]=0
+                done
+                print_info "All states reset to LIST"
+                sleep 1
+                ;;
+            6)
+                clear
+                print_info "Thanks for using the software installer!"
+                exit 0
+                ;;
+            *)
+                print_error "Invalid choice. Please select 1-6."
+                sleep 1
                 ;;
         esac
-        
-        # Small delay to prevent excessive CPU usage
-        sleep 0.05
     done
-    
-    # Restore terminal settings
-    stty "$old_tty_settings"
-    clear
-    print_info "Thanks for using the software installer!"
 }
 
 # Main function
@@ -327,31 +283,32 @@ main() {
         exit 1
     fi
     
-    # Show initial warning when run via curl
+    # Show initial warning
+    clear
+    echo -e "${YELLOW}================================================================${NC}"
+    echo -e "${YELLOW} Interactive Software Installer${NC}"
+    echo -e "${YELLOW} Repository: https://github.com/bhagyajitjagdev/software-installer${NC}"
+    echo -e "${YELLOW}================================================================${NC}"
+    echo
+    echo -e "${YELLOW}WARNING:${NC} You are about to run a software installer script."
+    echo -e "${YELLOW}Please review the code at the repository above.${NC}"
+    echo
+    
+    # Only ask for confirmation if running interactively
     if [ -t 0 ]; then
-        clear
-        echo -e "${YELLOW}================================================================${NC}"
-        echo -e "${YELLOW} Interactive Software Installer${NC}"
-        echo -e "${YELLOW} Repository: https://github.com/bhagyajitjagdev/software-installer${NC}"
-        echo -e "${YELLOW}================================================================${NC}"
-        echo
-        echo -e "${YELLOW}WARNING:${NC} You are about to run a software installer script."
-        echo -e "${YELLOW}Please review the code at the repository above.${NC}"
-        echo
         read -p "Do you want to continue? (y/N): " confirm
         if [[ ! $confirm =~ ^[Yy]$ ]]; then
             print_info "Installation cancelled by user."
             exit 0
         fi
-        echo
     fi
     
-    # Start the interactive interface
-    main_loop
+    # Start the main menu
+    main_menu
 }
 
-# Handle script interruption
-trap 'stty sane; clear; echo "Script interrupted."; exit 1' INT TERM
+# Handle interruption gracefully
+trap 'clear; print_info "Script interrupted. Goodbye!"; exit 1' INT TERM
 
 # Run main function
 main "$@"
