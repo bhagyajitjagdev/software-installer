@@ -23,6 +23,7 @@ SOFTWARE_LIST=(
     "system:nmap:nmap - Network Discovery Tool:install_nmap:software"
     "productivity:productivity_tools:Productivity Tools:none:group"
     "productivity:bat:bat - Better Cat with Syntax Highlighting:install_bat:software"
+    "productivity:gdu:gdu - Fast disk usage analyzer:install_gdu:software"
 )
 
 # Current selection and states
@@ -94,6 +95,16 @@ install_curl() {
     print_success "curl installed successfully"
 }
 
+install_gdu() {
+    print_info "Installing gdu..."
+    if command_exists gdu; then
+        print_warning "gdu is already installed"
+        return 0
+    fi
+    sudo apt-get update -qq && sudo apt-get install -y gdu
+    print_success "gdu installed successfully"
+}
+
 install_bat() {
     print_info "Installing bat..."
     if command_exists bat || command_exists batcat; then
@@ -126,6 +137,12 @@ uninstall_nmap() {
 
 uninstall_curl() {
     print_warning "curl is a system dependency - skipping uninstall"
+}
+
+uninstall_gdu() {
+    print_info "Uninstalling gdu..."
+    sudo apt-get remove -y gdu
+    print_success "gdu uninstalled"
 }
 
 uninstall_bat() {
