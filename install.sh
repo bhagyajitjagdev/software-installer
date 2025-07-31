@@ -15,10 +15,9 @@ WHITE='\033[1;37m'
 NC='\033[0m' # No Color
 BOLD='\033[1m'
 
-# Background colors for selection
-BG_WHITE='\033[47m\033[30m'
-BG_GREEN='\033[42m\033[30m'
-BG_RED='\033[41m\033[37m'
+# Highlight colors for selection
+HIGHLIGHT='\033[7m'  # Reverse video
+NORMAL='\033[0m'
 
 # Software list with their states
 # Format: "software_name:display_name:current_state:install_function"
@@ -70,88 +69,78 @@ update_bashrc() {
     fi
 }
 
-# Function to hide cursor
-hide_cursor() {
-    printf '\033[?25l'
-}
-
-# Function to show cursor
-show_cursor() {
-    printf '\033[?25h'
-}
-
-# Function to move cursor to position
-move_cursor() {
-    printf '\033[%d;%dH' "$1" "$2"
-}
-
-# Function to clear screen
-clear_screen() {
-    printf '\033[2J\033[H'
-}
-
-# Function to get software state color
-get_state_color() {
+# Function to get state color and text
+get_state_display() {
     local state=$1
     case $state in
-        0) echo -e "${BG_WHITE}" ;;      # White background for list
-        1) echo -e "${BG_GREEN}" ;;      # Green background for install
-        2) echo -e "${BG_RED}" ;;        # Red background for uninstall
-    esac
-}
-
-# Function to get state text
-get_state_text() {
-    local state=$1
-    case $state in
-        0) echo "LIST" ;;
-        1) echo "INSTALL" ;;
-        2) echo "UNINSTALL" ;;
+        0) echo -e "${WHITE}[LIST]${NC}" ;;
+        1) echo -e "${GREEN}[INSTALL]${NC}" ;;
+        2) echo -e "${RED}[UNINSTALL]${NC}" ;;
     esac
 }
 
 # Function to draw the interface
 draw_interface() {
-    clear_screen
+    clear
     
     # Header
-    echo -e "${BLUE}╔════════════════════════════════════════════════════════════════╗${NC}"
-    echo -e "${BLUE}║${NC}              ${BOLD}Interactive Software Installer${NC}              ${BLUE}║${NC}"
-    echo -e "${BLUE}║${NC}        Repository: bhagyajitjagdev/software-installer        ${BLUE}║${NC}"
-    echo -e "${BLUE}╚════════════════════════════════════════════════════════════════╝${NC}"
+    echo -e "${BLUE}================================================================${NC}"
+    echo -e "${BLUE}              Interactive Software Installer${NC}"
+    echo -e "${BLUE}        Repository: bhagyajitjagdev/software-installer${NC}"
+    echo -e "${BLUE}================================================================${NC}"
     echo
-    echo -e "${YELLOW}Navigation:${NC} ↑↓ arrows to move, SPACE to cycle states, ENTER to execute, Q to quit"
-    echo -e "${YELLOW}States:${NC} ${BG_WHITE} LIST ${NC} → ${BG_GREEN} INSTALL ${NC} → ${BG_RED} UNINSTALL ${NC} → ${BG_WHITE} LIST ${NC}"
+    echo -e "${YELLOW}Navigation:${NC} j/k or ↑↓ arrows, SPACE to cycle states, ENTER to execute, q to quit"
+    echo -e "${YELLOW}States:${NC} ${WHITE}[LIST]${NC} → ${GREEN}[INSTALL]${NC} → ${RED}[UNINSTALL]${NC}"
     echo
     
     # Software list
     for i in "${!SOFTWARE_LIST[@]}"; do
         IFS=':' read -r sw_name display_name state install_func <<< "${SOFTWARE_LIST[$i]}"
         
-        local prefix="  "
-        local suffix=""
-        
-        # Highlight current selection
-        if [ $i -eq $CURRENT_SELECTION ]; then
-            prefix="▶ "
-            suffix=" ◀"
-        fi
-        
-        # Get state color and text
-        local state_color=$(get_state_color $state)
-        local state_text=$(get_state_text $state)
+        local state_display=$(get_state_display $state)
         
         # Check if software is already installed
         local installed_status=""
         if command_exists "$sw_name"; then
-            installed_status=" ${GREEN}[INSTALLED]${NC}"
+            installed_status=" ${GREEN}✓ INSTALLED${NC}"
         fi
         
-        echo -e "${prefix}${state_color} ${state_text} ${NC} ${display_name}${installed_status}${suffix}"
+        # Highlight current selection
+        if [ $i -eq $CURRENT_SELECTION ]; then
+            echo -e "${HIGHLIGHT} ▶ $state_display $display_name$installed_status ${NC}"
+        else
+            echo -e "   $state_display $display_name$installed_status"
+        fi
     done
     
     echo
-    echo -e "${BLUE}════════════════════════════════════════════════════════════════${NC}"
+    echo -e "${BLUE}================================================================${NC}"
+    echo -e "Use j/k keys or arrow keys to navigate, SPACE to select action, ENTER to execute"
+}
+
+# Function to read a single key
+read_single_key() {
+    local key
+    read -rsn1 key
+    
+    # Handle escape sequences (arrow keys)
+    if [[ $key == $'\033' ]]; then
+        read -rsn2 -t 0.1 key
+        case "$key" in
+            '[A') echo "UP" ;;
+            '[B') echo "DOWN" ;;
+            *) echo "ESC" ;;
+        esac
+    else
+        case "$key" in
+            'j'|'J') echo "DOWN" ;;
+            'k'|'K') echo "UP" ;;
+            ' ') echo "SPACE" ;;
+            $'\n'|$'\r') echo "ENTER" ;;
+            'q'|'Q') echo "QUIT" ;;
+            *) echo "OTHER" ;;
+        esac
+    fi
 }
 
 # Function to cycle software state
@@ -165,26 +154,6 @@ cycle_state() {
     SOFTWARE_LIST[$index]="$sw_name:$display_name:$state:$install_func"
 }
 
-# Function to handle key input
-read_key() {
-    local key
-    read -rsn1 key
-    
-    case "$key" in
-        $'\033')  # ESC sequence
-            read -rsn2 key
-            case "$key" in
-                '[A') echo "UP" ;;      # Up arrow
-                '[B') echo "DOWN" ;;    # Down arrow
-            esac
-            ;;
-        ' ') echo "SPACE" ;;            # Space bar
-        $'\n') echo "ENTER" ;;          # Enter key
-        'q'|'Q') echo "QUIT" ;;         # Q key
-        *) echo "OTHER" ;;
-    esac
-}
-
 # Installation functions
 install_htop() {
     print_info "Installing htop..."
@@ -194,7 +163,7 @@ install_htop() {
         return 0
     fi
     
-    sudo apt-get update
+    sudo apt-get update -qq
     sudo apt-get install -y htop
     
     print_success "htop installed successfully"
@@ -209,7 +178,7 @@ install_nmap() {
         return 0
     fi
     
-    sudo apt-get update
+    sudo apt-get update -qq
     sudo apt-get install -y nmap
     
     print_success "nmap installed successfully"
@@ -224,7 +193,7 @@ install_curl() {
         return 0
     fi
     
-    sudo apt-get update
+    sudo apt-get update -qq
     sudo apt-get install -y curl
     
     # Add useful curl aliases
@@ -257,17 +226,27 @@ uninstall_curl() {
 execute_actions() {
     local actions_found=false
     
+    clear
+    echo -e "${BLUE}================================================================${NC}"
+    echo -e "${BLUE}                    Executing Actions${NC}"
+    echo -e "${BLUE}================================================================${NC}"
+    echo
+    
     for i in "${!SOFTWARE_LIST[@]}"; do
         IFS=':' read -r sw_name display_name state install_func <<< "${SOFTWARE_LIST[$i]}"
         
         case $state in
             1) # Install
                 actions_found=true
+                echo -e "${GREEN}Installing: $display_name${NC}"
                 $install_func
+                echo
                 ;;
             2) # Uninstall
                 actions_found=true
+                echo -e "${RED}Uninstalling: $display_name${NC}"
                 uninstall_$sw_name
+                echo
                 ;;
         esac
     done
@@ -285,17 +264,22 @@ execute_actions() {
     fi
     
     echo
-    read -p "Press Enter to continue..."
+    echo "Press any key to continue..."
+    read -rsn1
 }
 
 # Main interactive loop
 main_loop() {
-    hide_cursor
+    # Store original terminal settings
+    local old_tty_settings=$(stty -g)
+    
+    # Set terminal to raw mode for better key handling
+    stty -echo -icanon time 0 min 0
     
     while true; do
         draw_interface
         
-        key=$(read_key)
+        key=$(read_single_key)
         
         case "$key" in
             "UP")
@@ -308,33 +292,29 @@ main_loop() {
                 cycle_state $CURRENT_SELECTION
                 ;;
             "ENTER")
-                show_cursor
-                clear_screen
+                # Restore terminal settings before executing
+                stty "$old_tty_settings"
                 execute_actions
-                hide_cursor
+                # Set back to raw mode
+                stty -echo -icanon time 0 min 0
                 ;;
             "QUIT")
                 break
                 ;;
         esac
+        
+        # Small delay to prevent excessive CPU usage
+        sleep 0.05
     done
     
-    show_cursor
-    clear_screen
+    # Restore terminal settings
+    stty "$old_tty_settings"
+    clear
     print_info "Thanks for using the software installer!"
-}
-
-# Cleanup function
-cleanup() {
-    show_cursor
-    clear_screen
 }
 
 # Main function
 main() {
-    # Set trap for cleanup
-    trap cleanup EXIT INT TERM
-    
     # Check if running on Ubuntu/Debian
     if ! command_exists apt-get; then
         print_error "This script requires apt-get (Ubuntu/Debian). Exiting."
@@ -349,10 +329,11 @@ main() {
     
     # Show initial warning when run via curl
     if [ -t 0 ]; then
-        echo -e "${YELLOW}╔════════════════════════════════════════════════════════════════╗${NC}"
-        echo -e "${YELLOW}║${NC} ${BOLD}Interactive Software Installer${NC}                              ${YELLOW}║${NC}"
-        echo -e "${YELLOW}║${NC} Repository: https://github.com/bhagyajitjagdev/software-installer ${YELLOW}║${NC}"
-        echo -e "${YELLOW}╚════════════════════════════════════════════════════════════════╝${NC}"
+        clear
+        echo -e "${YELLOW}================================================================${NC}"
+        echo -e "${YELLOW} Interactive Software Installer${NC}"
+        echo -e "${YELLOW} Repository: https://github.com/bhagyajitjagdev/software-installer${NC}"
+        echo -e "${YELLOW}================================================================${NC}"
         echo
         echo -e "${YELLOW}WARNING:${NC} You are about to run a software installer script."
         echo -e "${YELLOW}Please review the code at the repository above.${NC}"
@@ -368,6 +349,9 @@ main() {
     # Start the interactive interface
     main_loop
 }
+
+# Handle script interruption
+trap 'stty sane; clear; echo "Script interrupted."; exit 1' INT TERM
 
 # Run main function
 main "$@"
