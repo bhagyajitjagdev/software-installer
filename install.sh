@@ -1,9 +1,7 @@
+cat install.sh
 #!/bin/bash
 
-# Interactive Software Installer Script with Arrow Keys
-# Repository: https://github.com/bhagyajitjagdev/software-installer
-# Usage: curl -fsSL https://raw.githubusercontent.com/bhagyajitjagdev/software-installer/main/install.sh | bash
-
+# Interactive Software Installer with Groups
 set -e
 
 # Colors
@@ -12,29 +10,37 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 WHITE='\033[1;37m'
+CYAN='\033[0;36m'
 NC='\033[0m'
 BOLD='\033[1m'
 
-# Software configuration
-SOFTWARE_NAMES=("htop" "nmap" "curl")
-SOFTWARE_DESCRIPTIONS=(
-    "htop - Interactive Process Viewer"
-    "nmap - Network Discovery Tool" 
-    "curl - Command Line HTTP Client"
+# Software groups and items
+# Format: "group_name:software_name:display_name:install_function:type"
+# type: software=installable software, group=group header
+SOFTWARE_LIST=(
+    "system:system_tools:System Tools:none:group"
+    "system:htop:htop - Interactive Process Viewer:install_htop:software"
+    "system:curl:curl - Command Line HTTP Client:install_curl:software"
+    "system:nmap:nmap - Network Discovery Tool:install_nmap:software"
+    "productivity:productivity_tools:Productivity Tools:none:group"
+    "productivity:bat:bat - Better Cat with Syntax Highlighting:install_bat:software"
 )
 
-# State: 0=LIST(white), 1=INSTALL(green), 2=UNINSTALL(red)
-declare -a SOFTWARE_STATES=(0 0 0)
+# Current selection and states
+declare -a SOFTWARE_STATES=()
 CURRENT_ROW=0
-TOTAL_ITEMS=${#SOFTWARE_NAMES[@]}
+TOTAL_ITEMS=${#SOFTWARE_LIST[@]}
 
-# Function to print colored output
+# Initialize states
+for i in "${!SOFTWARE_LIST[@]}"; do
+    SOFTWARE_STATES[$i]=0
+done
+
+# Helper functions
 print_info() { echo -e "${BLUE}[INFO]${NC} $1"; }
 print_success() { echo -e "${GREEN}[SUCCESS]${NC} $1"; }
 print_warning() { echo -e "${YELLOW}[WARNING]${NC} $1"; }
 print_error() { echo -e "${RED}[ERROR]${NC} $1"; }
-
-# Check if command exists
 command_exists() { command -v "$1" >/dev/null 2>&1; }
 
 # Update ~/.bashrc
@@ -50,7 +56,6 @@ update_bashrc() {
     fi
 }
 
-# Get state display
 get_state_display() {
     case $1 in
         0) echo -e "${WHITE}[ LIST     ]${NC}" ;;
@@ -87,8 +92,24 @@ install_curl() {
         return 0
     fi
     sudo apt-get update -qq && sudo apt-get install -y curl
-    update_bashrc 'alias curl-json="curl -H \"Content-Type: application/json\""' "Curl JSON alias"
     print_success "curl installed successfully"
+}
+
+install_bat() {
+    print_info "Installing bat..."
+    if command_exists bat || command_exists batcat; then
+        print_warning "bat is already installed"
+        # Still add the alias if it doesn't exist
+        update_bashrc 'alias bat="batcat --paging=never"' "Bat alias with no paging"
+        return 0
+    fi
+    
+    sudo apt-get update -qq && sudo apt-get install -y bat
+    
+    # Add bat alias for Ubuntu (where it's installed as batcat)
+    update_bashrc 'alias bat="batcat --paging=never"' "Bat alias with no paging"
+    
+    print_success "bat installed successfully with alias"
 }
 
 # Uninstall functions
@@ -108,7 +129,29 @@ uninstall_curl() {
     print_warning "curl is a system dependency - skipping uninstall"
 }
 
-# Draw the interface
+uninstall_bat() {
+    print_info "Uninstalling bat..."
+    sudo apt-get remove -y bat
+    print_success "bat uninstalled"
+}
+
+# Parse software entry
+parse_software_entry() {
+    local entry="$1"
+    local field="$2"
+    
+    IFS=':' read -r group_name software_name display_name install_func entry_type <<< "$entry"
+    
+    case $field in
+        "group") echo "$group_name" ;;
+        "software") echo "$software_name" ;;
+        "display") echo "$display_name" ;;
+        "function") echo "$install_func" ;;
+        "type") echo "$entry_type" ;;
+    esac
+}
+
+# Draw interface
 draw_interface() {
     clear
     echo -e "${BLUE}╔══════════════════════════════════════════════════════════════╗${NC}"
@@ -116,28 +159,40 @@ draw_interface() {
     echo -e "${BLUE}║${NC}        Repository: bhagyajitjagdev/software-installer        ${BLUE}║${NC}"
     echo -e "${BLUE}╚══════════════════════════════════════════════════════════════╝${NC}"
     echo
-    echo -e "${YELLOW}Controls: ↑↓ Navigate | SPACE Cycle State | ENTER Execute | Q Quit${NC}"
-    echo -e "${YELLOW}States: ${WHITE}LIST${NC} → ${GREEN}INSTALL${NC} → ${RED}UNINSTALL${NC} → ${WHITE}LIST${NC}${NC}"
+    echo -e "${YELLOW}Controls: ↑↓ Navigate | S Select/Cycle | R Run Actions | Q Quit${NC}"
+    echo -e "${YELLOW}States: ${WHITE}LIST${NC} → ${GREEN}INSTALL${NC} → ${RED}UNINSTALL${NC} → ${WHITE}LIST${NC}"
     echo
     
-    # Draw software list
-    for i in "${!SOFTWARE_NAMES[@]}"; do
-        local sw="${SOFTWARE_NAMES[$i]}"
-        local desc="${SOFTWARE_DESCRIPTIONS[$i]}"
-        local state="${SOFTWARE_STATES[$i]}"
-        local state_display=$(get_state_display $state)
+    for i in "${!SOFTWARE_LIST[@]}"; do
+        local entry="${SOFTWARE_LIST[$i]}"
+        local entry_type=$(parse_software_entry "$entry" "type")
+        local display_name=$(parse_software_entry "$entry" "display")
+        local software_name=$(parse_software_entry "$entry" "software")
         
-        # Check if installed
-        local status=""
-        if command_exists "$sw"; then
-            status=" ${GREEN}✓${NC}"
-        fi
-        
-        # Highlight current row
-        if [ $i -eq $CURRENT_ROW ]; then
-            echo -e " ${YELLOW}▶${NC} $state_display $desc$status"
+        if [ "$entry_type" = "group" ]; then
+            # Group header
+            if [ $i -eq $CURRENT_ROW ]; then
+                echo -e " ${YELLOW}▶${NC} ${CYAN}${BOLD}$display_name${NC}"
+            else
+                echo -e "   ${CYAN}${BOLD}$display_name${NC}"
+            fi
         else
-            echo -e "   $state_display $desc$status"
+            # Software item
+            local state="${SOFTWARE_STATES[$i]}"
+            local state_display=$(get_state_display $state)
+            
+            # Check if installed
+            local status=""
+            if command_exists "$software_name" || ([ "$software_name" = "bat" ] && command_exists "batcat"); then
+                status=" ${GREEN}✓${NC}"
+            fi
+            
+            # Highlight current row
+            if [ $i -eq $CURRENT_ROW ]; then
+                echo -e " ${YELLOW}▶${NC} $state_display $display_name$status"
+            else
+                echo -e "   $state_display $display_name$status"
+            fi
         fi
     done
     
@@ -145,204 +200,49 @@ draw_interface() {
     echo -e "${BLUE}══════════════════════════════════════════════════════════════${NC}"
 }
 
-# Read a single key with better escape sequence handling
+# Simple key reading
 read_key() {
     local key
+    read -rsn1 key
     
-    # Use dd to read exactly one byte at a time
-    key=$(dd bs=1 count=1 2>/dev/null)
-    
-    # Check if it's an escape sequence
-    if [[ $key == 
-
-# Execute selected actions
-execute_actions() {
-    local actions=()
-    
-    # Collect actions
-    for i in "${!SOFTWARE_NAMES[@]}"; do
-        local sw="${SOFTWARE_NAMES[$i]}"
-        local state="${SOFTWARE_STATES[$i]}"
-        
-        case $state in
-            1) actions+=("install_$sw:Installing $sw") ;;
-            2) actions+=("uninstall_$sw:Uninstalling $sw") ;;
-        esac
-    done
-    
-    if [ ${#actions[@]} -eq 0 ]; then
-        clear
-        print_warning "No actions selected!"
-        echo
-        read -p "Press Enter to continue..." -r
-        return
-    fi
-    
-    # Execute actions
-    clear
-    echo -e "${BLUE}══════════════════════════════════════════════════════════════${NC}"
-    echo -e "${BLUE}                     Executing Actions${NC}"
-    echo -e "${BLUE}══════════════════════════════════════════════════════════════${NC}"
-    echo
-    
-    for action in "${actions[@]}"; do
-        IFS=':' read -r func desc <<< "$action"
-        echo -e "${YELLOW}$desc...${NC}"
-        $func
-        echo
-    done
-    
-    print_success "All actions completed!"
-    
-    # Reset states
-    for i in "${!SOFTWARE_STATES[@]}"; do
-        SOFTWARE_STATES[$i]=0
-    done
-    
-    echo
-    read -p "Press Enter to continue..." -r
-}
-
-# Main interactive loop - ONLY redraw when needed
-main_loop() {
-    local need_redraw=true
-    local old_stty
-    
-    # Save current terminal settings and set raw mode
-    old_stty=$(stty -g)
-    stty raw -echo
-    
-    # Cleanup function
-    cleanup() {
-        stty "$old_stty"
-        clear
-        print_info "Thanks for using the software installer!"
-    }
-    
-    # Set trap for cleanup
-    trap cleanup EXIT INT TERM
-    
-    while true; do
-        # Only redraw if needed
-        if [ "$need_redraw" = true ]; then
-            draw_interface
-            need_redraw=false
-        fi
-        
-        # Read key (this blocks until key is pressed)
-        local key=$(read_key)
-        
-        case $key in
-            "UP")
-                CURRENT_ROW=$(( (CURRENT_ROW - 1 + TOTAL_ITEMS) % TOTAL_ITEMS ))
-                need_redraw=true
-                ;;
-            "DOWN") 
-                CURRENT_ROW=$(( (CURRENT_ROW + 1) % TOTAL_ITEMS ))
-                need_redraw=true
-                ;;
-            "SPACE")
-                SOFTWARE_STATES[$CURRENT_ROW]=$(( (SOFTWARE_STATES[$CURRENT_ROW] + 1) % 3 ))
-                need_redraw=true
-                ;;
-            "ENTER")
-                # Restore terminal for command execution
-                stty "$old_stty"
-                execute_actions
-                # Set back to raw mode
-                stty raw -echo
-                need_redraw=true
-                ;;
-            "QUIT")
-                break
-                ;;
-            *)
-                # Do nothing for other keys, don't redraw
-                ;;
-        esac
-    done
-    
-    # Cleanup will be called by trap
-}
-
-# Get input that works with pipes
-get_input() {
-    local prompt="$1"
-    local response
-    
-    if [ ! -t 0 ]; then
-        exec < /dev/tty
-    fi
-    
-    read -p "$prompt" -r response
-    echo "$response"
-}
-
-# Main function
-main() {
-    # System checks
-    if ! command_exists apt-get; then
-        print_error "This script requires apt-get (Ubuntu/Debian). Exiting."
-        exit 1
-    fi
-    
-    if [ "$EUID" -eq 0 ]; then
-        print_error "Please do not run this script as root (sudo). It will ask for sudo when needed."
-        exit 1
-    fi
-    
-    # Initial confirmation
-    clear
-    echo -e "${YELLOW}╔══════════════════════════════════════════════════════════════╗${NC}"
-    echo -e "${YELLOW}║${NC} ${BOLD}Interactive Software Installer${NC}                              ${YELLOW}║${NC}"
-    echo -e "${YELLOW}║${NC} Repository: https://github.com/bhagyajitjagdev/software-installer ${YELLOW}║${NC}"
-    echo -e "${YELLOW}╚══════════════════════════════════════════════════════════════╝${NC}"
-    echo
-    echo -e "${YELLOW}WARNING:${NC} You are about to run a software installer script."
-    echo
-    
-    local confirm=$(get_input "Do you want to continue? (y/N): ")
-    if [[ ! $confirm =~ ^[Yy]$ ]]; then
-        print_info "Installation cancelled."
-        exit 0
-    fi
-    
-    # Start interactive interface
-    main_loop
-}
-
-# Run the script
-main "$@"\033' ]]; then
-        # Read the bracket
-        local bracket=$(dd bs=1 count=1 2>/dev/null)
-        if [[ $bracket == '[' ]]; then
-            # Read the direction
-            local direction=$(dd bs=1 count=1 2>/dev/null)
-            case $direction in
-                'A') echo "UP" ;;
-                'B') echo "DOWN" ;;
+    case $key in
+        $'\033')
+            read -rsn2 key
+            case $key in
+                '[A') echo "UP" ;;
+                '[B') echo "DOWN" ;;
                 *) echo "OTHER" ;;
             esac
-        else
-            echo "ESC"
-        fi
-    else
-        case $key in
-            ' ') echo "SPACE" ;;
-            
+            ;;
+        's'|'S') echo "SELECT" ;;
+        'r'|'R') echo "RUN" ;;
+        'q'|'Q') echo "QUIT" ;;
+        'k'|'K') echo "UP" ;;
+        'j'|'J') echo "DOWN" ;;
+        *) echo "OTHER" ;;
+    esac
+}
 
-# Execute selected actions
+# Execute actions
 execute_actions() {
     local actions=()
     
-    # Collect actions
-    for i in "${!SOFTWARE_NAMES[@]}"; do
-        local sw="${SOFTWARE_NAMES[$i]}"
+    for i in "${!SOFTWARE_LIST[@]}"; do
+        local entry="${SOFTWARE_LIST[$i]}"
+        local entry_type=$(parse_software_entry "$entry" "type")
+        
+        # Skip group headers
+        if [ "$entry_type" = "group" ]; then
+            continue
+        fi
+        
+        local software_name=$(parse_software_entry "$entry" "software")
+        local install_func=$(parse_software_entry "$entry" "function")
         local state="${SOFTWARE_STATES[$i]}"
         
         case $state in
-            1) actions+=("install_$sw:Installing $sw") ;;
-            2) actions+=("uninstall_$sw:Uninstalling $sw") ;;
+            1) actions+=("${install_func}") ;;
+            2) actions+=("uninstall_${software_name}") ;;
         esac
     done
     
@@ -354,7 +254,6 @@ execute_actions() {
         return
     fi
     
-    # Execute actions
     clear
     echo -e "${BLUE}══════════════════════════════════════════════════════════════${NC}"
     echo -e "${BLUE}                     Executing Actions${NC}"
@@ -362,35 +261,35 @@ execute_actions() {
     echo
     
     for action in "${actions[@]}"; do
-        IFS=':' read -r func desc <<< "$action"
-        echo -e "${YELLOW}$desc...${NC}"
-        $func
+        $action
         echo
     done
     
     print_success "All actions completed!"
     
-    # Reset states
+    # Reset states (only for software items, not group headers)
     for i in "${!SOFTWARE_STATES[@]}"; do
-        SOFTWARE_STATES[$i]=0
+        local entry="${SOFTWARE_LIST[$i]}"
+        local entry_type=$(parse_software_entry "$entry" "type")
+        if [ "$entry_type" = "software" ]; then
+            SOFTWARE_STATES[$i]=0
+        fi
     done
     
     echo
     read -p "Press Enter to continue..." -r
 }
 
-# Main interactive loop - ONLY redraw when needed
+# Main loop
 main_loop() {
     local need_redraw=true
     
     while true; do
-        # Only redraw if needed
         if [ "$need_redraw" = true ]; then
             draw_interface
             need_redraw=false
         fi
         
-        # Read key (this blocks until key is pressed)
         local key=$(read_key)
         
         case $key in
@@ -402,19 +301,21 @@ main_loop() {
                 CURRENT_ROW=$(( (CURRENT_ROW + 1) % TOTAL_ITEMS ))
                 need_redraw=true
                 ;;
-            "SPACE")
-                SOFTWARE_STATES[$CURRENT_ROW]=$(( (SOFTWARE_STATES[$CURRENT_ROW] + 1) % 3 ))
-                need_redraw=true
+            "SELECT")
+                # Only allow selection on software items, not group headers
+                local entry="${SOFTWARE_LIST[$CURRENT_ROW]}"
+                local entry_type=$(parse_software_entry "$entry" "type")
+                if [ "$entry_type" = "software" ]; then
+                    SOFTWARE_STATES[$CURRENT_ROW]=$(( (SOFTWARE_STATES[$CURRENT_ROW] + 1) % 3 ))
+                    need_redraw=true
+                fi
                 ;;
-            "ENTER")
+            "RUN")
                 execute_actions
                 need_redraw=true
                 ;;
             "QUIT")
                 break
-                ;;
-            *)
-                # Do nothing for other keys, don't redraw
                 ;;
         esac
     done
@@ -423,22 +324,8 @@ main_loop() {
     print_info "Thanks for using the software installer!"
 }
 
-# Get input that works with pipes
-get_input() {
-    local prompt="$1"
-    local response
-    
-    if [ ! -t 0 ]; then
-        exec < /dev/tty
-    fi
-    
-    read -p "$prompt" -r response
-    echo "$response"
-}
-
 # Main function
 main() {
-    # System checks
     if ! command_exists apt-get; then
         print_error "This script requires apt-get (Ubuntu/Debian). Exiting."
         exit 1
@@ -449,7 +336,6 @@ main() {
         exit 1
     fi
     
-    # Initial confirmation
     clear
     echo -e "${YELLOW}╔══════════════════════════════════════════════════════════════╗${NC}"
     echo -e "${YELLOW}║${NC} ${BOLD}Interactive Software Installer${NC}                              ${YELLOW}║${NC}"
@@ -459,304 +345,13 @@ main() {
     echo -e "${YELLOW}WARNING:${NC} You are about to run a software installer script."
     echo
     
-    local confirm=$(get_input "Do you want to continue? (y/N): ")
+    read -p "Do you want to continue? (y/N): " confirm
     if [[ ! $confirm =~ ^[Yy]$ ]]; then
         print_info "Installation cancelled."
         exit 0
     fi
     
-    # Start interactive interface
     main_loop
 }
 
-# Run the script
-main "$@"\n'|
-
-# Execute selected actions
-execute_actions() {
-    local actions=()
-    
-    # Collect actions
-    for i in "${!SOFTWARE_NAMES[@]}"; do
-        local sw="${SOFTWARE_NAMES[$i]}"
-        local state="${SOFTWARE_STATES[$i]}"
-        
-        case $state in
-            1) actions+=("install_$sw:Installing $sw") ;;
-            2) actions+=("uninstall_$sw:Uninstalling $sw") ;;
-        esac
-    done
-    
-    if [ ${#actions[@]} -eq 0 ]; then
-        clear
-        print_warning "No actions selected!"
-        echo
-        read -p "Press Enter to continue..." -r
-        return
-    fi
-    
-    # Execute actions
-    clear
-    echo -e "${BLUE}══════════════════════════════════════════════════════════════${NC}"
-    echo -e "${BLUE}                     Executing Actions${NC}"
-    echo -e "${BLUE}══════════════════════════════════════════════════════════════${NC}"
-    echo
-    
-    for action in "${actions[@]}"; do
-        IFS=':' read -r func desc <<< "$action"
-        echo -e "${YELLOW}$desc...${NC}"
-        $func
-        echo
-    done
-    
-    print_success "All actions completed!"
-    
-    # Reset states
-    for i in "${!SOFTWARE_STATES[@]}"; do
-        SOFTWARE_STATES[$i]=0
-    done
-    
-    echo
-    read -p "Press Enter to continue..." -r
-}
-
-# Main interactive loop - ONLY redraw when needed
-main_loop() {
-    local need_redraw=true
-    
-    while true; do
-        # Only redraw if needed
-        if [ "$need_redraw" = true ]; then
-            draw_interface
-            need_redraw=false
-        fi
-        
-        # Read key (this blocks until key is pressed)
-        local key=$(read_key)
-        
-        case $key in
-            "UP")
-                CURRENT_ROW=$(( (CURRENT_ROW - 1 + TOTAL_ITEMS) % TOTAL_ITEMS ))
-                need_redraw=true
-                ;;
-            "DOWN") 
-                CURRENT_ROW=$(( (CURRENT_ROW + 1) % TOTAL_ITEMS ))
-                need_redraw=true
-                ;;
-            "SPACE")
-                SOFTWARE_STATES[$CURRENT_ROW]=$(( (SOFTWARE_STATES[$CURRENT_ROW] + 1) % 3 ))
-                need_redraw=true
-                ;;
-            "ENTER")
-                execute_actions
-                need_redraw=true
-                ;;
-            "QUIT")
-                break
-                ;;
-            *)
-                # Do nothing for other keys, don't redraw
-                ;;
-        esac
-    done
-    
-    clear
-    print_info "Thanks for using the software installer!"
-}
-
-# Get input that works with pipes
-get_input() {
-    local prompt="$1"
-    local response
-    
-    if [ ! -t 0 ]; then
-        exec < /dev/tty
-    fi
-    
-    read -p "$prompt" -r response
-    echo "$response"
-}
-
-# Main function
-main() {
-    # System checks
-    if ! command_exists apt-get; then
-        print_error "This script requires apt-get (Ubuntu/Debian). Exiting."
-        exit 1
-    fi
-    
-    if [ "$EUID" -eq 0 ]; then
-        print_error "Please do not run this script as root (sudo). It will ask for sudo when needed."
-        exit 1
-    fi
-    
-    # Initial confirmation
-    clear
-    echo -e "${YELLOW}╔══════════════════════════════════════════════════════════════╗${NC}"
-    echo -e "${YELLOW}║${NC} ${BOLD}Interactive Software Installer${NC}                              ${YELLOW}║${NC}"
-    echo -e "${YELLOW}║${NC} Repository: https://github.com/bhagyajitjagdev/software-installer ${YELLOW}║${NC}"
-    echo -e "${YELLOW}╚══════════════════════════════════════════════════════════════╝${NC}"
-    echo
-    echo -e "${YELLOW}WARNING:${NC} You are about to run a software installer script."
-    echo
-    
-    local confirm=$(get_input "Do you want to continue? (y/N): ")
-    if [[ ! $confirm =~ ^[Yy]$ ]]; then
-        print_info "Installation cancelled."
-        exit 0
-    fi
-    
-    # Start interactive interface
-    main_loop
-}
-
-# Run the script
-main "$@"\r') echo "ENTER" ;;
-            'q'|'Q') echo "QUIT" ;;
-            'k'|'K') echo "UP" ;;
-            'j'|'J') echo "DOWN" ;;
-            *) echo "OTHER" ;;
-        esac
-    fi
-}
-
-# Execute selected actions
-execute_actions() {
-    local actions=()
-    
-    # Collect actions
-    for i in "${!SOFTWARE_NAMES[@]}"; do
-        local sw="${SOFTWARE_NAMES[$i]}"
-        local state="${SOFTWARE_STATES[$i]}"
-        
-        case $state in
-            1) actions+=("install_$sw:Installing $sw") ;;
-            2) actions+=("uninstall_$sw:Uninstalling $sw") ;;
-        esac
-    done
-    
-    if [ ${#actions[@]} -eq 0 ]; then
-        clear
-        print_warning "No actions selected!"
-        echo
-        read -p "Press Enter to continue..." -r
-        return
-    fi
-    
-    # Execute actions
-    clear
-    echo -e "${BLUE}══════════════════════════════════════════════════════════════${NC}"
-    echo -e "${BLUE}                     Executing Actions${NC}"
-    echo -e "${BLUE}══════════════════════════════════════════════════════════════${NC}"
-    echo
-    
-    for action in "${actions[@]}"; do
-        IFS=':' read -r func desc <<< "$action"
-        echo -e "${YELLOW}$desc...${NC}"
-        $func
-        echo
-    done
-    
-    print_success "All actions completed!"
-    
-    # Reset states
-    for i in "${!SOFTWARE_STATES[@]}"; do
-        SOFTWARE_STATES[$i]=0
-    done
-    
-    echo
-    read -p "Press Enter to continue..." -r
-}
-
-# Main interactive loop - ONLY redraw when needed
-main_loop() {
-    local need_redraw=true
-    
-    while true; do
-        # Only redraw if needed
-        if [ "$need_redraw" = true ]; then
-            draw_interface
-            need_redraw=false
-        fi
-        
-        # Read key (this blocks until key is pressed)
-        local key=$(read_key)
-        
-        case $key in
-            "UP")
-                CURRENT_ROW=$(( (CURRENT_ROW - 1 + TOTAL_ITEMS) % TOTAL_ITEMS ))
-                need_redraw=true
-                ;;
-            "DOWN") 
-                CURRENT_ROW=$(( (CURRENT_ROW + 1) % TOTAL_ITEMS ))
-                need_redraw=true
-                ;;
-            "SPACE")
-                SOFTWARE_STATES[$CURRENT_ROW]=$(( (SOFTWARE_STATES[$CURRENT_ROW] + 1) % 3 ))
-                need_redraw=true
-                ;;
-            "ENTER")
-                execute_actions
-                need_redraw=true
-                ;;
-            "QUIT")
-                break
-                ;;
-            *)
-                # Do nothing for other keys, don't redraw
-                ;;
-        esac
-    done
-    
-    clear
-    print_info "Thanks for using the software installer!"
-}
-
-# Get input that works with pipes
-get_input() {
-    local prompt="$1"
-    local response
-    
-    if [ ! -t 0 ]; then
-        exec < /dev/tty
-    fi
-    
-    read -p "$prompt" -r response
-    echo "$response"
-}
-
-# Main function
-main() {
-    # System checks
-    if ! command_exists apt-get; then
-        print_error "This script requires apt-get (Ubuntu/Debian). Exiting."
-        exit 1
-    fi
-    
-    if [ "$EUID" -eq 0 ]; then
-        print_error "Please do not run this script as root (sudo). It will ask for sudo when needed."
-        exit 1
-    fi
-    
-    # Initial confirmation
-    clear
-    echo -e "${YELLOW}╔══════════════════════════════════════════════════════════════╗${NC}"
-    echo -e "${YELLOW}║${NC} ${BOLD}Interactive Software Installer${NC}                              ${YELLOW}║${NC}"
-    echo -e "${YELLOW}║${NC} Repository: https://github.com/bhagyajitjagdev/software-installer ${YELLOW}║${NC}"
-    echo -e "${YELLOW}╚══════════════════════════════════════════════════════════════╝${NC}"
-    echo
-    echo -e "${YELLOW}WARNING:${NC} You are about to run a software installer script."
-    echo
-    
-    local confirm=$(get_input "Do you want to continue? (y/N): ")
-    if [[ ! $confirm =~ ^[Yy]$ ]]; then
-        print_info "Installation cancelled."
-        exit 0
-    fi
-    
-    # Start interactive interface
-    main_loop
-}
-
-# Run the script
 main "$@"
