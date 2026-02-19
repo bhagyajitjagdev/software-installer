@@ -25,52 +25,95 @@ Thank you for your interest in contributing to the Interactive Software Installe
 
 ### 📦 Adding New Software
 
-Want to add software to the installer? Here's how:
+Want to add software to the installer? For standard packages, it's just **one line**:
 
-#### Step 1: Add to Software List
+#### Standard Packages (One Line)
+
 Add your software to the `SOFTWARE_LIST` array in `install.sh`:
 
 ```bash
-"group_name:software_name:Display Name:install_function_name:software"
+"group_name:software_name:Display Name:software"
 ```
 
 **Example:**
 ```bash
-"productivity:tree:tree - Directory Tree Viewer:install_tree:software"
+"productivity:tree:tree - Directory Tree Viewer:software"
 ```
 
-#### Step 2: Create Installation Function
+That's it! The generic handler takes care of install, uninstall, and detection automatically across all supported package managers (`apt`, `dnf`, `pacman`).
+
+#### Cross-Distro Package Names
+
+If a package has a **different name** on different distros, add entries to the PM mapping arrays:
+
+```bash
+declare -A PKG_APT=( ["fd"]="fd-find" )   # apt installs "fd-find" for fd
+declare -A PKG_DNF=()                       # dnf uses "fd" (canonical name)
+declare -A PKG_PACMAN=( ["fd"]="fd" )       # pacman uses "fd"
+```
+
+Rules:
+- **No entry** = use the canonical name (the `software_name` from `SOFTWARE_LIST`)
+- **`"-"`** = package is unavailable on that distro (greyed out as N/A in the UI)
+- **Any other string** = use that as the actual package name
+
+**Example marking a package unavailable on apt:**
+```bash
+declare -A PKG_APT=( ["some_tool"]="-" )    # Not in apt repos
+```
+
+#### Special Packages (Override Functions)
+
+If your package needs custom behavior (aliases, alternate binary names, blocked uninstall, etc.), add an override function. The script uses convention-based dispatch: if `install_<name>()` or `uninstall_<name>()` exists, it's called instead of the generic handler.
+
+**Example with alias (PM-aware):**
 ```bash
 install_tree() {
     print_info "Installing tree..."
-    if command_exists tree; then
+    if check_installed tree; then
         print_warning "tree is already installed"
         return 0
     fi
-    sudo apt-get update -qq && sudo apt-get install -y tree
-    print_success "tree installed successfully"
+    local pkg_name
+    pkg_name=$(get_pkg_name "tree")
+    if pm_install "$pkg_name"; then
+        update_bashrc 'alias lt="tree -L 2"' "Tree with depth limit alias"
+        print_success "tree installed successfully with alias"
+    else
+        print_error "Failed to install tree"
+        return 1
+    fi
 }
 ```
 
-#### Step 3: Create Uninstall Function
+**Example with alternate binary name:**
 ```bash
-uninstall_tree() {
-    print_info "Uninstalling tree..."
-    sudo apt-get remove -y tree
-    print_success "tree uninstalled"
+# If the package installs a differently-named binary
+is_installed_fd() {
+    command_exists fd || command_exists fdfind
 }
 ```
 
-#### Step 4: Add Configuration (Optional)
-If your software needs aliases or configuration:
+**Example blocking uninstall:**
 ```bash
-install_tree() {
-    # ... installation code ...
-    
-    # Add useful alias
-    update_bashrc 'alias lt="tree -L 2"' "Tree with depth limit alias"
-    
-    print_success "tree installed successfully with alias"
+uninstall_curl() {
+    print_warning "curl is a system dependency - skipping uninstall"
+}
+```
+
+**Example with per-distro logic:**
+```bash
+install_bat() {
+    # ...
+    local pkg_name
+    pkg_name=$(get_pkg_name "bat")
+    if pm_install "$pkg_name"; then
+        # batcat alias only needed on Debian/Ubuntu
+        if [[ "$PM" == "apt" ]]; then
+            update_bashrc 'alias bat="batcat --paging=never"' "Bat alias"
+        fi
+        print_success "bat installed successfully"
+    fi
 }
 ```
 
@@ -79,29 +122,29 @@ install_tree() {
 To create a new software category:
 
 ```bash
-"new_group:group_identifier:Group Display Name:none:group"
+"new_group:Group Display Name:group"
 ```
 
 **Example:**
 ```bash
-"development:dev_tools:Development Tools:none:group"
+"development:Development Tools:group"
 ```
 
 ## 📋 Software Guidelines
 
 ### ✅ Good Software Candidates
 - **Popular** and widely used
-- **Available** in Ubuntu/Debian repositories
+- **Available** in official repositories (apt, dnf, or pacman)
 - **Useful** for developers or general users
 - **Safe** and well-maintained
 - **Free** and open source preferred
 
 ### ❌ Avoid These
 - Proprietary software requiring licenses
-- Software not in official repositories
+- Software not in official repositories on any supported distro
 - Experimental or unstable packages
 - Software with complex manual setup
-- Packages that require additional PPAs
+- Packages that require additional PPAs (unless handled via override function)
 
 ## 🧪 Testing Your Changes
 
@@ -118,20 +161,29 @@ Before submitting a pull request:
 - Use a VM or container
 - Test the one-liner command:
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/yourusername/software-installer/your-branch/install.sh)
+curl -fsSL https://raw.githubusercontent.com/yourusername/software-installer/your-branch/install.sh | bash
 ```
 
 ### 3. Check All Functions
-- Navigation (↑↓ arrows)
-- Selection (S key)
-- Execution (R key)
-- State changes (LIST → INSTALL → UNINSTALL)
+- Navigation (`↑↓` arrows, `j/k`, `PgUp/PgDn`, `g/G`)
+- Selection (`Space` to cycle states)
+- Search (`/` to filter, `Esc` to clear)
+- Info panel (`i` to toggle)
+- Execution (`R` or `Enter`)
+- Smart state cycling (only valid states shown per package)
 
 ### 4. Verify Integration
 - Aliases added to ~/.bashrc
 - Software works after installation
 - Uninstall works correctly
 - No conflicts with existing software
+
+### 5. Multi-Distro Testing
+If your package has different names across distros or uses PM-specific logic:
+- Test on at least one apt-based distro (Ubuntu/Debian)
+- Test on dnf-based (Fedora) or pacman-based (Arch) if possible
+- Verify unavailable packages show as **(N/A)** and can't be selected
+- Use Docker containers for quick cross-distro testing
 
 ## 📝 Code Style
 
@@ -143,29 +195,51 @@ bash <(curl -fsSL https://raw.githubusercontent.com/yourusername/software-instal
 - Include **error handling**
 
 ### Function Naming
+
+Override functions follow the naming convention `install_<name>()` / `uninstall_<name>()` where `<name>` matches the `software_name` field in `SOFTWARE_LIST`. For custom detection, use `is_installed_<name>()`.
+
 ```bash
-# Installation functions
+# Override: custom install (only if generic handler isn't enough)
 install_software_name() {
     # Implementation
 }
 
-# Uninstall functions  
+# Override: custom uninstall (e.g., block uninstall for system deps)
 uninstall_software_name() {
     # Implementation
 }
+
+# Override: custom detection (e.g., binary has a different name)
+is_installed_software_name() {
+    command_exists software_name || command_exists alternate_name
+}
 ```
+
+### PM Abstraction Functions
+
+Override functions should use the PM-agnostic helpers instead of calling `apt-get`/`dnf`/`pacman` directly:
+
+| Function | Purpose |
+|----------|---------|
+| `pm_install(pkg)` | Install a package |
+| `pm_remove(pkg)` | Remove a package |
+| `pm_update()` | Update package index |
+| `get_pkg_name(canonical)` | Resolve canonical name to PM-specific name |
+| `check_installed(name)` | Check if a package is installed |
 
 ### Error Handling
 ```bash
 install_example() {
     print_info "Installing example..."
-    
-    if command_exists example; then
+
+    if check_installed example; then
         print_warning "example is already installed"
         return 0
     fi
-    
-    if sudo apt-get update -qq && sudo apt-get install -y example; then
+
+    local pkg_name
+    pkg_name=$(get_pkg_name "example")
+    if pm_install "$pkg_name"; then
         print_success "example installed successfully"
     else
         print_error "Failed to install example"
